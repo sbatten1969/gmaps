@@ -10,7 +10,7 @@
         startLongitude : -73.95+0.7,   // Map initial center point, unless overridden
         allowGeolocate : true,        // If true, allow user to activate Geolocation feature
         allowBathrooms : true,        // If true, allow user to display bathrooms near the course. Requires programmer to actually implement bathroom points!
-        allowVanRoutes : false,        // If true, allow user to display alternate van routes. Requires programmer to actually implement van routes!
+        allowVanRoutes : true,        // If true, allow user to display alternate van routes. Requires programmer to actually implement van routes!
         hasTurnByTurnDirections : true,   // true if the legend details should link to turn-by-turn directions, false otherwise
         turnByTurnDirectionsUrl : 'https://docs.google.com/spreadsheets/d/1C5ROPJNFH5US2VWjQBwXIp3QcMhl8nX61yj6DsTip4c/edit#gid=0'
     };
@@ -333,7 +333,7 @@ var activeState = // Bad design, but this is needed for transfer of control from
     {
       map : null,
       markerArrays : null, // Ugh, design is really getting loose
-      openIW : null,
+      vanRoutes : null, // Same comment above
       showGeolocate : false,
       showBathrooms : false,
       showVanRoutes : false,
@@ -514,7 +514,7 @@ function colorIcon(icon, color) {
           lineOptions.infowindowText = titleText;
       }
 
-      addPolyline(linePathArray, mapObject, lineOptions);
+      return addPolyline(linePathArray, mapObject, lineOptions);
   }
 
 
@@ -540,26 +540,26 @@ function getMarkerConfigs() {
         { latLngString: '40.683260, -73.881650', size: MARKER_SMALL, labelString: '5.3', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>5.3</b>: LEFT<br><div style='width:200px'>Left on Ridgewood Ave.</div>", mouseoverText: '5.3 LEFT: Ridgewood Ave'  }, 
         { latLngString: '40.686820, -73.867020', size: MARKER_SMALL, labelString: '6.1', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>6.1</b>: RIGHT<br><div style='width:200px'>Right on Rockaway Blvd.</div>", mouseoverText: '6.1 RIGHT: Rockaway Blvd'  }, 
         { latLngString: '40.680680, -73.844740', size: MARKER_SMALL, labelString: '7.3', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>7.3</b>: RIGHT<br><div style='width:200px'>Right on Cross Bay Blvd/Woodhaven Blvd, crossing under A train track. Run on RIGHT side of street.</div>", mouseoverText: '7.3 RIGHT: Cross Bay Blvd (run on right side)'  }, 
-        { latLngString: '40.669893, -73.842733', size: MARKER_LARGE, labelString: '8.0', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>8.0</b><small> (GPS 40.6699, -73.8427)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Cross Bay Blvd at possible exchange/support point: Vito Locascio field at 149th Ave, public bathroom in park. (Continue running on right side of street.)</div>", mouseoverText: '8.0 STRAIGHT: Cross Bay Blvd (run on right side)'  }, 
+        { latLngString: '40.669893, -73.842733', size: MARKER_LARGE, labelString: '8.0', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>8.0</b><small> (GPS 40.6699, -73.8427)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Cross Bay Blvd at possible exchange/support point: Vito Locascio field at 149th Ave. (Continue running on right side of street.)</div>", mouseoverText: '8.0 STRAIGHT: Cross Bay Blvd (run on right side)'  }, 
         { latLngString: '40.649109, -73.837555', size: MARKER_LARGE, labelString: '9.5', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>9.5</b><small> (GPS 40.6491, -73.8376)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Cross Bay Blvd at possible exchange/support point: 165th St, last access point for two miles. (Continue running on path on right side of street.)</div>", mouseoverText: '9.5 STRAIGHT: Cross Bay Blvd (run on right side)', majorLabel: '10'  }, 
         { latLngString: '40.617300, -73.823940', size: MARKER_LARGE, labelString: '11.8', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>11.8</b><small> (GPS 40.6173, -73.8239)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Cross Bay Blvd at possible exchange/support point: Jamaica Bay Wildlife Refuge Visitor Center. (Continue running on right side of street.)</div>", mouseoverText: '11.8 STRAIGHT: Cross Bay Blvd (run on right side)'  }, 
         { latLngString: '40.598900, -73.820770', size: MARKER_SMALL, labelString: '13.1', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>13.1</b>: CROSS<br><div style='width:200px'>Safely cross Cross Bay Blvd at E 20th Rd, then continue south on Cross Bay Blvd.</div>", mouseoverText: '13.1 CROSS: Cross street at E 20th Rd'  }, 
         { latLngString: '40.598300, -73.820630', size: MARKER_SMALL, labelString: '13.2', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>13.2</b>: LEFT<br><div style='width:200px'>Turn Left at Van Brundt Rd, follow road as it curves toward the right.</div>", mouseoverText: '13.2 LEFT: Van Brundt Rd'  }, 
         { latLngString: '40.597090, -73.820290', size: MARKER_SMALL, labelString: '13.3', pathStyle: 'ROAD_NOVANACCESS', labelPosition: 'DEFAULT', labelDetails: "<b>13.3</b>: ENTER PATH<br><div style='width:200px'>Enter Pedestrian Path to cross the Cross Bay Bridge. (Look for entrance near Bayview restaurant.)</div>", mouseoverText: '13.3 ENTER PATH: Cross Bay Blvd'  }, 
-        { latLngString: '40.588740, -73.817130', size: MARKER_SMALL, labelString: '13.9', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>13.9</b>: RIGHT<br><div style='width:200px'>Exit Bridge Path Ramp & cross Beach Channel Dr. Bear right (taking the curve) onto Beach 94th St.</div>", mouseoverText: '13.9 RIGHT: Beach 94th St'  }, 
+        { latLngString: '40.588740, -73.817130', size: MARKER_SMALL, labelString: '13.9', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>13.9</b>: RIGHT<br><div style='width:200px'>Exit bridge path ramp in front of McDonalds. Turn right and cross Beach Channel Dr. Bear right (taking the curve) onto Beach 94th St.</div>", mouseoverText: '13.9 RIGHT: Beach 94th St'  }, 
         { latLngString: '40.586010, -73.816590', size: MARKER_SMALL, labelString: '14.1', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>14.1</b>: RIGHT<br><div style='width:200px'>Right on Rockaway Beach Blvd (just 100 ft to Check Point statue).</div>", mouseoverText: '14.1 RIGHT: Rockaway Beach Blvd'  }, 
         { latLngString: '40.585841, -73.816938', size: MARKER_LARGE, labelString: '14.1', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>14.1</b><small> (GPS 40.5858, -73.8169)</small>: CHECKPOINT<br><div style='width:200px'>WOMAN\'S WAR MEMORIAL (in the middle section where the parking lots are). After taking team photo at checkpoint, take immediate Left onto Cross Bay Parkway.</div>", mouseoverText: '14.1 CHECKPOINT: Women\'s War Memorial. After checkpoint, immediate left onto Cross Bay Parkway'  }, 
-        { latLngString: '40.583590, -73.815870', size: MARKER_SMALL, labelString: '14.3', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>14.3</b>: LEFT<br><div style='width:200px'>At end of Cross Bay Parkway, take staircase and turn Left onto Boardwalk. Continue until Beach 41st Street</div>", mouseoverText: '14.3 LEFT: Enter boardwalk'  }, 
+        { latLngString: '40.583590, -73.815870', size: MARKER_SMALL, labelString: '14.3', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>14.3</b>: LEFT<br><div style='width:200px'>At end of Cross Bay Parkway, take ramp and turn Left onto Boardwalk. Continue until Beach 41st Street</div>", mouseoverText: '14.3 LEFT: Enter boardwalk'  }, 
         { latLngString: '40.588884, -73.788658', size: MARKER_LARGE, labelString: '15.9', pathStyle: 'TRAIL_PAVED', labelPosition: 'ABOVE', labelDetails: "<b>15.9</b><small> (GPS 40.5889, -73.7887)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Boardwalk at possible exchange/support point: Beach 59th Street Playground (bathrooms).</div>", mouseoverText: '15.9 STRAIGHT: Passing Beach 59th Street Playground'  }, 
         { latLngString: '40.592480, -73.754130', size: MARKER_SMALL, labelString: '<font color=#800000>Closed</font>', pathStyle: 'INVISIBLE', labelPosition: 'BELOW', labelDetails: "<b><font color=#800000>Closed</font></b>:  <br><div style='width:200px'>Inaccessible boardwalk segment</div>", mouseoverText: '<font color=#800000>Closed</font>  : Inaccessible boardwalk segment'  }, 
         { latLngString: '40.591620, -73.772540', size: MARKER_LARGE, labelString: '16.6', pathStyle: 'TRAIL_PAVED', labelPosition: 'BELOW', labelDetails: "<b>16.6</b><small> (GPS 40.5916, -73.7725)</small>: LEFT<br><div style='width:200px'>Turn Left at Beach 41st St because there is a construction fence ahead.</div>", mouseoverText: '16.6 LEFT: Exit boardwalk at 41st St'  }, 
-        { latLngString: '40.593080, -73.772690', size: MARKER_SMALL, labelString: '16.7', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>16.7</b>: RIGHT<br><div style='width:200px'>Right on Edgemere Ave. Run on RIGHT side of street (with traffic).</div>", mouseoverText: '16.7 RIGHT: Edgemere Ave'  }, 
+        { latLngString: '40.593080, -73.772690', size: MARKER_SMALL, labelString: '16.7', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>16.7</b>: RIGHT<br><div style='width:200px'>Right on Edgemere Ave. Run on sidewalk on RIGHT side of street (with traffic).</div>", mouseoverText: '16.7 RIGHT: Edgemere Ave'  }, 
         { latLngString: '40.595620, -73.764990', size: MARKER_SMALL, labelString: '17.2', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>17.2</b>: STRAIGHT<br><div style='width:200px'>Continue straight to merge onto Seagirt Blvd. Run on RIGHT side of street (with traffic).</div>", mouseoverText: '17.2 STRAIGHT: Seagirt Blvd'  }, 
         { latLngString: '40.595260, -73.747610', size: MARKER_LARGE, labelString: '18.2', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>18.2</b><small> (GPS 40.5953, -73.7476)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Seagirt Blvd at possible exchange/support point: Rockaway Beach Club Park on your right.</div>", mouseoverText: '18.2 STRAIGHT: Passing Rockaway Beach Club'  }, 
-        { latLngString: '40.595980, -73.745360', size: MARKER_SMALL, labelString: '18.3', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>18.3</b>: RIGHTISH<br><div style='width:200px'>Take Right at fork onto Seagirt Ave.</div>", mouseoverText: '18.3 RIGHTISH: Seagirt Ave'  }, 
+        { latLngString: '40.595980, -73.745360', size: MARKER_SMALL, labelString: '18.3', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>18.3</b>: RIGHTISH<br><div style='width:200px'>Take Right at fork onto Seagirt Ave. Stay on sidewalk on right side of street.</div>", mouseoverText: '18.3 RIGHTISH: Seagirt Ave'  }, 
         { latLngString: '40.596110, -73.738050', size: MARKER_SMALL, labelString: '18.7', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>18.7</b>: ENTER PATH<br><div style='width:200px'>Go through the roundabout at the end of the road, get on sidewalk on right side of road. Turn left and jog up the short ramp. At the top of the hill, turn right to go through the toll plaza and enter the Pedestrian Pathway over Atlantic Beach Bridge. (Run sidewalk on RIGHT side of road.)</div>", mouseoverText: '18.7 ENTER PATH: Atlantic Beach Bridge pedestrian pathway (run on right side)'  }, 
         { latLngString: '40.590160, -73.737900', size: MARKER_LARGE, labelString: '19.2', pathStyle: 'ROAD_OPEN', labelPosition: 'RIGHT', labelDetails: "<b>19.2</b><small> (GPS 40.5902, -73.7379)</small>: LEFT<br><div style='width:200px'>Exit Path at the end and turn Left onto Acapulco St.</div>", mouseoverText: '19.2 LEFT: Acapulco St'  }, 
-        { latLngString: '40.589590, -73.737950', size: MARKER_SMALL, labelString: '19.3', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>19.3</b>: LEFT<br><div style='width:200px'>Immediate Left on Park St, run on RIGHT side of road because sidewalk is better.</div>", mouseoverText: '19.3 LEFT: Park St (run on right side)'  }, 
+        { latLngString: '40.589590, -73.737950', size: MARKER_SMALL, labelString: '19.3', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>19.3</b>: LEFT<br><div style='width:200px'>Immediate Left on Park St. Cross over to run on RIGHT side of road because sidewalk is better.</div>", mouseoverText: '19.3 LEFT: Park St (run on right side)'  }, 
         { latLngString: '40.588220, -73.719690', size: MARKER_SMALL, labelString: '20.2', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>20.2</b>: STRAIGHT<br><div style='width:200px'>Continue straight as road becomes Beech Street, then W Beech St. Continue running on RIGHT side of road.</div>", mouseoverText: '20.2 STRAIGHT: Road becomes Beech Street (run on right side)'  }, 
         { latLngString: '40.586010, -73.686930', size: MARKER_SMALL, labelString: '22.0', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>22.0</b>: RIGHT<br><div style='width:200px'>Right on New York Ave.</div>", mouseoverText: '22.0 RIGHT: New York Ave'  }, 
         { latLngString: '40.583900, -73.686840', size: MARKER_LARGE, labelString: '22.1', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>22.1</b><small> (GPS 40.5839, -73.6868)</small>: LEFT<br><div style='width:200px'>Left on Boardwalk. Stay on it until the end.</div>", mouseoverText: '22.1 LEFT: Enter boardwalk'  }, 
@@ -569,11 +569,11 @@ function getMarkerConfigs() {
         { latLngString: '40.607730, -73.556260', size: MARKER_LARGE, labelString: 'Van', pathStyle: 'INVISIBLE', labelPosition: 'BELOW', labelDetails: "<b>Van</b><small> (GPS 40.6077, -73.5563)</small>:  <br><div style='width:200px'>In van, drive all runners from Long Beach to Jones Beach Field 5 Parking Lot.</div>", mouseoverText: 'Van  : In van:  drive to next starting point in Jones Beach'  }, 
         { latLngString: '40.596090, -73.499550', size: MARKER_LARGE, labelString: '24.0', pathStyle: 'TRAIL_PAVED', labelPosition: 'BELOW', labelDetails: "<b>24.0</b><small> (GPS 40.5961, -73.4996)</small>: START<br><div style='width:200px'>Get on the paved pathway starting from Jones Beach field 6.  Head north and take the underpass below Ocean Parkway.</div>", mouseoverText: '24.0 START: Paved Pathway', majorLabel: '24'  }, 
         { latLngString: '40.597450, -73.499970', size: MARKER_SMALL, labelString: '24.1', pathStyle: 'TRAIL_PAVED', labelPosition: 'ABOVE', labelDetails: "<b>24.1</b>: LEFT<br><div style='width:200px'>After passing under Ocean Parkway, turn Left to stay on the paved pathway.</div>", mouseoverText: '24.1 LEFT: Paved Pathway'  }, 
-        { latLngString: '40.601760, -73.507110', size: MARKER_SMALL, labelString: '24.7', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>24.7</b>: ENTER PATH<br><div style='width:200px'>After passing by parking lots for Jones Beach Field 5 and the Jones Beach theater, get on the paved Jones Beach/Wantagh Parkway Bikeway. No van access for next 5 miles!</div>", mouseoverText: '24.7 ENTER PATH: Jones Beach/Wantagh Parkway Bikeway'  }, 
+        { latLngString: '40.601760, -73.507110', size: MARKER_SMALL, labelString: '24.7', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>24.7</b>: ENTER PATH<br><div style='width:200px'>After passing by parking lots for Jones Beach Field 5 and the Jones Beach Theater, get on the paved Jones Beach/Wantagh Parkway Bikeway. No van access for next 5 miles!</div>", mouseoverText: '24.7 ENTER PATH: Jones Beach/Wantagh Parkway Bikeway'  }, 
         { latLngString: '40.596170, -73.499910', size: MARKER_SMALL, labelString: '<font color=#800000>NEW</font>', pathStyle: 'INVISIBLE', labelPosition: 'LEFT', labelDetails: "<b><font color=#800000>NEW</font></b>:  <br><div style='width:200px'>Section was added to avoid possible field 5 closure</div>", mouseoverText: '<font color=#800000>NEW</font>  : Section was added to avoid possible field 5 closure'  }, 
-        { latLngString: '40.659700, -73.507050', size: MARKER_SMALL, labelString: '29.2', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>29.2</b>: LEFT<br><div style='width:200px'>At parking lot, exit path. Turn Left and follow the road to the north to exit the park.</div>", mouseoverText: '29.2 LEFT: Park roadway (to park exit)'  }, 
+        { latLngString: '40.659700, -73.507050', size: MARKER_SMALL, labelString: '29.2', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>29.2</b>: LEFT<br><div style='width:200px'>Path ends at small park roadway. Turn Left and follow the road to the north to exit the park.</div>", mouseoverText: '29.2 LEFT: Park roadway (to park exit)'  }, 
         { latLngString: '40.664820, -73.507600', size: MARKER_LARGE, labelString: '29.7', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>29.7</b><small> (GPS 40.6648, -73.5076)</small>: RIGHT<br><div style='width:200px'>Cross Merrick Road and turn Right (run against traffic, on left side of street).</div>", mouseoverText: '29.7 RIGHT: Merrick Road', majorLabel: '30'  }, 
-        { latLngString: '40.666726, -73.475815', size: MARKER_LARGE, labelString: '31.4', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>31.4</b><small> (GPS 40.6667, -73.4758)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Merrick Blvd at possible exchange/support point: Division Ave/Hicksville Rd has a Sunoco, Starbucks, All-American Burger and other stores.</div>", mouseoverText: '31.4 STRAIGHT: Passing Sunoco across from Starbucks'  }, 
+        { latLngString: '40.666726, -73.475815', size: MARKER_LARGE, labelString: '31.4', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>31.4</b><small> (GPS 40.6667, -73.4758)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Merrick Blvd at possible exchange/support point: Hicksville Rd has a Sunoco, Starbucks, All-American Burger and other stores.</div>", mouseoverText: '31.4 STRAIGHT: Passing Sunoco across from Starbucks'  }, 
         { latLngString: '40.666440, -73.453069', size: MARKER_LARGE, labelString: '32.6', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>32.6</b><small> (GPS 40.6664, -73.4531)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Merrick Blvd at possible exchange/support point: Massapequa High School.</div>", mouseoverText: '32.6 STRAIGHT: Passing Massapequa High School'  }, 
         { latLngString: '40.671480, -73.423350', size: MARKER_SMALL, labelString: '34.2', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>34.2</b>: LEFT<br><div style='width:200px'>Left on County Line Road, also known as County Rd 1.</div>", mouseoverText: '34.2 LEFT: County Line Road'  }, 
         { latLngString: '40.678890, -73.424750', size: MARKER_LARGE, labelString: '34.7', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>34.7</b><small> (GPS 40.6789, -73.4248)</small>: RIGHT<br><div style='width:200px'>Right onto W Oak St aka County Rd 12 (at corner of Field of Dreams park).</div>", mouseoverText: '34.7 RIGHT: W. Oak St (aka Cty Rd 12)'  }, 
@@ -589,11 +589,11 @@ function getMarkerConfigs() {
         { latLngString: '40.700050, -73.323325', size: MARKER_LARGE, labelString: '40.4', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>40.4</b><small> (GPS 40.7001, -73.3233)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Railroad Ave at possible exchange/support point: Cupcake shop across from Babylon train station.</div>", mouseoverText: '40.4 STRAIGHT: Passing Babylon train station', majorLabel: '40'  }, 
         { latLngString: '40.700190, -73.322450', size: MARKER_SMALL, labelString: '40.5', pathStyle: 'ROAD_OPEN', labelPosition: 'RIGHT', labelDetails: "<b>40.5</b>: LEFT-RIGHT<br><div style='width:200px'>Left on Deer Park Ave, immediate Right onto George St.</div>", mouseoverText: '40.5 LEFT-RIGHT: Left: Deer Park Ave, immediate right: George St'  }, 
         { latLngString: '40.700440, -73.319450', size: MARKER_SMALL, labelString: '40.7', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>40.7</b>: LEFT<br><div style='width:200px'>Left on Cooper St.</div>", mouseoverText: '40.7 LEFT: Cooper St'  }, 
-        { latLngString: '40.701560, -73.319550', size: MARKER_SMALL, labelString: '40.8', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>40.8</b>: RIGHT<br><div style='width:200px'>First Right on John St, which becomes Union Blvd in 2 blocks, also known as County Rd 50.</div>", mouseoverText: '40.8 RIGHT: John St (aka Union Blvd)'  }, 
+        { latLngString: '40.701560, -73.319550', size: MARKER_SMALL, labelString: '40.8', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>40.8</b>: RIGHT<br><div style='width:200px'>First Right on John St, just before elevated railroad tracks. Street name becomes Union Blvd in 2 blocks, also known as County Rd 50.  Cross to stay on left side of road (against traffic) because the road becomes a divided highway ahead.</div>", mouseoverText: '40.8 RIGHT: John St (aka Union Blvd)'  }, 
         { latLngString: '40.724535, -73.251435', size: MARKER_LARGE, labelString: '44.7', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>44.7</b><small> (GPS 40.7245, -73.2514)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Union Blvd (County Rd 50) at possible exchange/support point: 7-Eleven at 4th Ave and Union Blvd.</div>", mouseoverText: '44.7 STRAIGHT: Passing Fourth Ave'  }, 
         { latLngString: '40.734110, -73.210010', size: MARKER_LARGE, labelString: '47.0', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>47.0</b><small> (GPS 40.7341, -73.2100)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Union Blvd (County Rd 50) at possible exchange/support point: 7-Eleven at Nassau Ave and Union Blvd.</div>", mouseoverText: '47.0 STRAIGHT: Passing Nassau Ave'  }, 
-        { latLngString: '40.737850, -73.168310', size: MARKER_SMALL, labelString: '49.2', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>49.2</b>: LEFT<br><div style='width:200px'>Left on Connetquot Ave. CAUTION: narrow shoulder! Run on LEFT SIDE and watch out for traffic.</div>", mouseoverText: '49.2 LEFT: Connetquot Ave'  }, 
-        { latLngString: '40.740300, -73.168750', size: MARKER_LARGE, labelString: '49.4', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>49.4</b><small> (GPS 40.7403, -73.1688)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Connetquot Ave at possible exchange/support point: Great River Train Station at Hawthorne Ave.</div>", mouseoverText: '49.4 STRAIGHT: Passing Great River train station', majorLabel: '49'  }, 
+        { latLngString: '40.737850, -73.168310', size: MARKER_SMALL, labelString: '49.2', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>49.2</b>: LEFT<br><div style='width:200px'>Left on Connetquot Ave. Run in bike lane on LEFT SIDE and watch out for traffic.</div>", mouseoverText: '49.2 LEFT: Connetquot Ave'  }, 
+        { latLngString: '40.740300, -73.168750', size: MARKER_LARGE, labelString: '49.4', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>49.4</b><small> (GPS 40.7403, -73.1688)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Connetquot Ave at possible exchange/support point: Great River Train Station at Hawthorne Ave. Stay on side walk on left side of road (run against traffic).</div>", mouseoverText: '49.4 STRAIGHT: Passing Great River train station', majorLabel: '49'  }, 
         { latLngString: '40.748320, -73.170200', size: MARKER_SMALL, labelString: '50.0', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>50.0</b>: RIGHT<br><div style='width:200px'>Right to Enter paved Bike Path after passing over the bridge over Sunrise Highway, directly after the exit ramp.</div>", mouseoverText: '50.0 RIGHT: Enter paved Bike Path'  }, 
         { latLngString: '40.750385, -73.135100', size: MARKER_LARGE, labelString: '51.9', pathStyle: 'TRAIL_PAVED', labelPosition: 'ABOVE', labelDetails: "<b>51.9</b><small> (GPS 40.7504, -73.1351)</small>: STRAIGHT<br><div style='width:200px'>Cross Pond Road, continue on Bike Path parallel to Sunrise Hwy. The path moves behind a shopping center containing a Piano Lounge and a western wear shop. (Possible exchange/support spot.)</div>", mouseoverText: '51.9 STRAIGHT: Cross Pond Road, continue on Bike Path'  }, 
         { latLngString: '40.753010, -73.123900', size: MARKER_SMALL, labelString: '52.6', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>52.6</b>: RIGHT<br><div style='width:200px'>At the end of the bike path, cross Oakdale-Bohemia Rd and turn Right.</div>", mouseoverText: '52.6 RIGHT: Oakdale-Bohemia Rd'  }, 
@@ -604,9 +604,9 @@ function getMarkerConfigs() {
         { latLngString: '40.734030, -73.115850', size: MARKER_LARGE, labelString: '54.5', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>54.5</b><small> (GPS 40.7340, -73.1159)</small>: LEFT<br><div style='width:200px'>Left on Montauk Highway.</div>", mouseoverText: '54.5 LEFT: Montauk Hwy'  }, 
         { latLngString: '40.733740, -73.115450', size: MARKER_SMALL, labelString: '54.6', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>54.6</b>: LEFT<br><div style='width:200px'>Take immediate Left on Brook St.</div>", mouseoverText: '54.6 LEFT: Brook St'  }, 
         { latLngString: '40.737230, -73.087640', size: MARKER_SMALL, labelString: '56.1', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>56.1</b>: RIGHT<br><div style='width:200px'>Right on Greeley Ave.</div>", mouseoverText: '56.1 RIGHT: Greeley Ave'  }, 
-        { latLngString: '40.734100, -73.086000', size: MARKER_SMALL, labelString: '56.3', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>56.3</b>: LEFT<br><div style='width:200px'>Left on Montauk Highway, running into downtown Sayville.</div>", mouseoverText: '56.3 LEFT: Montauk Hwy'  }, 
+        { latLngString: '40.734100, -73.086000', size: MARKER_SMALL, labelString: '56.3', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>56.3</b>: LEFT<br><div style='width:200px'>Left on Main St (Montauk Highway), running into downtown Sayville. Run on the right sidewalk (with traffic).</div>", mouseoverText: '56.3 LEFT: Montauk Hwy'  }, 
         { latLngString: '40.736260, -73.081880', size: MARKER_LARGE, labelString: '56.6', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>56.6</b><small> (GPS 40.7363, -73.0819)</small>: RIGHTISH<br><div style='width:200px'>Right at the fork to Middle Road.</div>", mouseoverText: '56.6 RIGHTISH: Middle Rd'  }, 
-        { latLngString: '40.735950, -73.059640', size: MARKER_LARGE, labelString: '57.8', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>57.8</b><small> (GPS 40.7360, -73.0596)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Middle Rd at possible exchange/support point:  Bayport Commons park.</div>", mouseoverText: '57.8 STRAIGHT: Passing Bayport Commons Park'  }, 
+        { latLngString: '40.736350, -73.058030', size: MARKER_LARGE, labelString: '57.8', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>57.8</b><small> (GPS 40.7364, -73.0580)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Middle Rd at possible exchange/support point:  Bayport Commons park.</div>", mouseoverText: '57.8 STRAIGHT: Passing Bayport Commons Park'  }, 
         { latLngString: '40.737140, -73.054830', size: MARKER_SMALL, labelString: '58.0', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>58.0</b>: LEFT<br><div style='width:200px'>Left on Snedecor Ave.</div>", mouseoverText: '58.0 LEFT: Snedecor Ave'  }, 
         { latLngString: '40.745620, -73.053350', size: MARKER_SMALL, labelString: '58.6', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>58.6</b>: RIGHT<br><div style='width:200px'>Right on Railroad St (just before railroad tracks), which will turn into Maple St after a few blocks.</div>", mouseoverText: '58.6 RIGHT: Railroad St aka Maple St'  }, 
         { latLngString: '40.748550, -73.036370', size: MARKER_SMALL, labelString: '59.5', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>59.5</b>: LEFT-RIGHT<br><div style='width:200px'>Left on Blue Point Ave, Right (immediately) on Madison St.</div>", mouseoverText: '59.5 LEFT-RIGHT: Left: Blue Point Ave, Immediate right: Madison St'  }, 
@@ -620,12 +620,12 @@ function getMarkerConfigs() {
         { latLngString: '40.763370, -73.001390', size: MARKER_SMALL, labelString: '62.1', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>62.1</b>: LEFT<br><div style='width:200px'>Left on Grove Ave.</div>", mouseoverText: '62.1 LEFT: Grove Ave'  }, 
         { latLngString: '40.764460, -73.001140', size: MARKER_SMALL, labelString: '62.2', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>62.2</b>: RIGHT<br><div style='width:200px'>Right on Swezey St.</div>", mouseoverText: '62.2 RIGHT: Swezey St'  }, 
         { latLngString: '40.763850, -72.989100', size: MARKER_SMALL, labelString: '62.7', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>62.7</b>: LEFT<br><div style='width:200px'>Left on Roe Ave.</div>", mouseoverText: '62.7 LEFT: Roe Ave'  }, 
-        { latLngString: '40.765820, -72.988770', size: MARKER_LARGE, labelString: '62.8', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>62.8</b><small> (GPS 40.7658, -72.9888)</small>: RIGHT<br><div style='width:200px'>Right on S Country Rd aka County Rd 36. Caution: There are narrow shoulders on this road -- run on whichever side has the best protection.</div>", mouseoverText: '62.8 RIGHT: S Country Rd (aka Cty Rd 36)'  }, 
+        { latLngString: '40.765820, -72.988770', size: MARKER_LARGE, labelString: '62.8', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>62.8</b><small> (GPS 40.7658, -72.9888)</small>: RIGHT<br><div style='width:200px'>Right on S Country Rd aka County Rd 36. Caution: There are narrow shoulders on this road -- run on left side for best protection.</div>", mouseoverText: '62.8 RIGHT: S Country Rd (aka Cty Rd 36)'  }, 
         { latLngString: '40.756640, -72.962980', size: MARKER_SMALL, labelString: '64.3', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>64.3</b>: LEFT<br><div style='width:200px'>Left on N Dunton Ave at Hedges Creek Park.</div>", mouseoverText: '64.3 LEFT: N Dunton Ave'  }, 
         { latLngString: '40.764020, -72.963290', size: MARKER_LARGE, labelString: '64.8', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>64.8</b><small> (GPS 40.7640, -72.9633)</small>: RIGHT<br><div style='width:200px'>Right on Head of the Neck Rd.</div>", mouseoverText: '64.8 RIGHT: Head of the Neck Rd'  }, 
         { latLngString: '40.765910, -72.935770', size: MARKER_SMALL, labelString: '66.3', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>66.3</b>: LEFT<br><div style='width:200px'>Left on Carver Blvd (almost at the very end of Head of the Neck Rd).</div>", mouseoverText: '66.3 LEFT: Carver Blvd'  }, 
-        { latLngString: '40.773020, -72.936460', size: MARKER_LARGE, labelString: '66.8', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>66.8</b><small> (GPS 40.7730, -72.9365)</small>: RIGHT<br><div style='width:200px'>Right on Beaver Dam Rd.</div>", mouseoverText: '66.8 RIGHT: Beaver Dam Rd'  }, 
-        { latLngString: '40.773370, -72.920160', size: MARKER_SMALL, labelString: '67.7', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>67.7</b>: LEFT<br><div style='width:200px'>Left on S Country Rd aka County Rd 36. Run on the right side for best sidewalks and shoulders.</div>", mouseoverText: '67.7 LEFT: S Country Rd (aka Cty Rd 36)'  }, 
+        { latLngString: '40.773020, -72.936460', size: MARKER_LARGE, labelString: '66.8', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>66.8</b><small> (GPS 40.7730, -72.9365)</small>: RIGHT<br><div style='width:200px'>Right on Beaver Dam Rd. Caution: There are narrow shoulders on this road -- run on left side for best protection.</div>", mouseoverText: '66.8 RIGHT: Beaver Dam Rd'  }, 
+        { latLngString: '40.773370, -72.920160', size: MARKER_SMALL, labelString: '67.7', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>67.7</b>: LEFT<br><div style='width:200px'>Left on S Country Rd aka County Rd 36. Run on the right side for best sidewalks and shoulders. (Take extra care passing dangerous curve at Fireplace Neck Rd.)</div>", mouseoverText: '67.7 LEFT: S Country Rd (aka Cty Rd 36)'  }, 
         { latLngString: '40.784850, -72.916780', size: MARKER_SMALL, labelString: '68.6', pathStyle: 'ROAD_OPEN', labelPosition: 'RIGHT', labelDetails: "<b>68.6</b>: STRAIGHT<br><div style='width:200px'>Continue straight to merge onto at Montauk Hwy aka County Rd 80. Stay on the right side of the road.</div>", mouseoverText: '68.6 STRAIGHT: Merge onto Montauk Hwy (aka Cty Rd 80)'  }, 
         { latLngString: '40.787050, -72.917150', size: MARKER_LARGE, labelString: '68.8', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>68.8</b><small> (GPS 40.7871, -72.9172)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Montauk Hwy at possible exchange/support point:  Carman Ave gas station. After passing, switch to the LEFT side for better sidewalks and shoulders.</div>", mouseoverText: '68.8 STRAIGHT: Passing Carman Ave'  }, 
         { latLngString: '40.800720, -72.880900', size: MARKER_SMALL, labelString: '71.0', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>71.0</b>: RIGHT<br><div style='width:200px'>Right on Smith Rd (cross at traffic light).</div>", mouseoverText: '71.0 RIGHT: Smith Rd'  }, 
@@ -634,7 +634,7 @@ function getMarkerConfigs() {
         { latLngString: '40.798350, -72.864450', size: MARKER_SMALL, labelString: '72.2', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>72.2</b>: RIGHT<br><div style='width:200px'>Right on Northern Blvd, which becomes Patchogue Ave.</div>", mouseoverText: '72.2 RIGHT: Northern Blvd aka Patchogue Ave'  }, 
         { latLngString: '40.801060, -72.840540', size: MARKER_SMALL, labelString: '73.5', pathStyle: 'ROAD_OPEN', labelPosition: 'RIGHT', labelDetails: "<b>73.5</b>: LEFT<br><div style='width:200px'>Left on Mastic Rd.</div>", mouseoverText: '73.5 LEFT: Mastic Rd'  }, 
         { latLngString: '40.806230, -72.837450', size: MARKER_LARGE, labelString: '73.9', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>73.9</b><small> (GPS 40.8062, -72.8375)</small>: RIGHT<br><div style='width:200px'>Cross Montauk Highway aka County Rd 80 and turn Right (running north/east against traffic).</div>", mouseoverText: '73.9 RIGHT: Montauk Highway'  }, 
-        { latLngString: '40.804210, -72.813410', size: MARKER_SMALL, labelString: '75.3', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>75.3</b>: LEFTISH<br><div style='width:200px'>Left at fork to Moriches Bypass, also known as Frowein Rd.</div>", mouseoverText: '75.3 LEFTISH: Moriches Bypass aka Frowein Rd'  }, 
+        { latLngString: '40.804210, -72.813410', size: MARKER_SMALL, labelString: '75.3', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>75.3</b>: LEFTISH<br><div style='width:200px'>Left at fork to Moriches Bypass / County Rd 98, also known as Frowein Rd.</div>", mouseoverText: '75.3 LEFTISH: Moriches Bypass aka Frowein Rd'  }, 
         { latLngString: '40.812270, -72.764260', size: MARKER_SMALL, labelString: '77.9', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>77.9</b>: RIGHT<br><div style='width:200px'>Right on Pine St (cross at traffic light).</div>", mouseoverText: '77.9 RIGHT: Pine St'  }, 
         { latLngString: '40.809900, -72.763940', size: MARKER_LARGE, labelString: '78.1', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>78.1</b><small> (GPS 40.8099, -72.7639)</small>: LEFT<br><div style='width:200px'>First Left on Railroad Ave.</div>", mouseoverText: '78.1 LEFT: Railroad Ave'  }, 
         { latLngString: '40.811360, -72.757420', size: MARKER_SMALL, labelString: '78.5', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>78.5</b>: RIGHT<br><div style='width:200px'>Railroad Ave dead ends for cars, but runners can go straight to pass over a small field. Then turn Right on Montauk Highway.</div>", mouseoverText: '78.5 RIGHT: Montauk Highway'  }, 
@@ -655,7 +655,7 @@ function getMarkerConfigs() {
         { latLngString: '40.856450, -72.505140', size: MARKER_SMALL, labelString: '96.1', pathStyle: 'ROAD_OPEN', labelPosition: 'RIGHT', labelDetails: "<b>96.1</b>: LEFT<br><div style='width:200px'>Left on Shinnecock Rd.</div>", mouseoverText: '96.1 LEFT: Shinnecock Rd'  }, 
         { latLngString: '40.857710, -72.513960', size: MARKER_SMALL, labelString: '96.6', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>96.6</b>: RIGHT<br><div style='width:200px'>Right on Ponquogue Ave.</div>", mouseoverText: '96.6 RIGHT: Ponquogue Ave'  }, 
         { latLngString: '40.862690, -72.513830', size: MARKER_LARGE, labelString: '96.9', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>96.9</b><small> (GPS 40.8627, -72.5138)</small>: LEFT<br><div style='width:200px'>Left on Bay Ave W. Wear lights and reflective gear to be visible to cars at dusk.</div>", mouseoverText: '96.9 LEFT: Bay Ave W'  }, 
-        { latLngString: '40.864510, -72.528030', size: MARKER_SMALL, labelString: '97.6', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>97.6</b>: STRAIGHT<br><div style='width:200px'>Continue straight on E Tiana Rd. Wear lights and reflective gear to be visible to cars at dusk.</div>", mouseoverText: '97.6 STRAIGHT: Road becomes E Tiana Rd'  }, 
+        { latLngString: '40.864325, -72.527020', size: MARKER_SMALL, labelString: '97.6', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>97.6</b>: STRAIGHT<br><div style='width:200px'>Continue straight on E Tiana Rd. Wear lights and reflective gear to be visible to cars at dusk.</div>", mouseoverText: '97.6 STRAIGHT: Road becomes E Tiana Rd'  }, 
         { latLngString: '40.871870, -72.541370', size: MARKER_SMALL, labelString: '98.6', pathStyle: 'ROAD_OPEN', labelPosition: 'RIGHT', labelDetails: "<b>98.6</b>: STRAIGHT<br><div style='width:200px'>Continue straight as road becomes Bellows Pond Rd crossing Montauk Hwy. Wear lights and reflective gear to be visible to cars at dusk.</div>", mouseoverText: '98.6 STRAIGHT: Road becomes Bellow Pond Rd'  }, 
         { latLngString: '40.878920, -72.553360', size: MARKER_LARGE, labelString: '99.6', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>99.6</b><small> (GPS 40.8789, -72.5534)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Bellows Pond Rd at possible exchange/support point: Sears Bellows County Park. Wear lights and reflective gear to be visible to cars at dusk.</div>", mouseoverText: '99.6 STRAIGHT: Passing Sears Bellows Park'  }, 
         { latLngString: '40.887990, -72.555410', size: MARKER_LARGE, labelString: '100.2', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>100.2</b><small> (GPS 40.8880, -72.5554)</small>: LEFT<br><div style='width:200px'>Left on Flanders Rd aka NY State Route 24. CAUTION: Run on left side of road (against traffic) and wear headlights and reflective gear because cars travel quickly on this road.</div>", mouseoverText: '100.2 LEFT: Flanders Rd', majorLabel: '100'  }, 
@@ -834,14 +834,14 @@ function createBathroomMarkerArrays(markerConfigs, map) {
           position : new google.maps.LatLng(thisLatLngArray[0], thisLatLngArray[1]),
           icon : colorIcon(thisIcon, thisColor),
           strokeOpacity : Config.OPACITY["MARKERSTROKE"],
-          labelContent : 'M|F',
+          labelContent : 'M|W',
           labelPosition : 'DEEP_BELOW',
           labelStyle : { 
               color : thisColor,
               fontSize : thisFontSize,
               opacity : Config.OPACITY["LABEL"]
           },
-          mouseoverText : thisMarkerConfig.mouseoverText,
+          mouseoverText : 'Bathroom', // thisMarkerConfig.mouseoverText,
           infowindowText : '<b>Bathroom:</b> ' + thisMarkerConfig.labelDetails
         };
 
@@ -854,16 +854,19 @@ function createBathroomMarkerArrays(markerConfigs, map) {
 }
 
 
-function showOrHideMarkers(currentZoom) {
+function showOrHideElements(currentZoom) {
     var markerArrays = activeState.markerArrays;
+
     // iterate over markers and call setVisible
     for (i = 0; i < markerArrays.allSmallMarkers.length; i++) { 
         markerArrays.allSmallMarkers[i].setVisible(currentZoom >= Config.ZOOMDISPLAY["SMALLMARKERS"]-1);
         markerArrays.allSmallMarkers[i].set("labelVisible", currentZoom >= Config.ZOOMDISPLAY["SMALLMARKERS"]);
     }
+
     for (i = 0; i < markerArrays.allLargeMarkers.length; i++) {
         markerArrays.allLargeMarkers[i].setVisible(currentZoom >= Config.ZOOMDISPLAY["NONMAJORMARKERS"]);
     }
+
     for (i = 0; i < markerArrays.majorMarkers.length; i++) {
         if (currentZoom < Config.ZOOMDISPLAY["NONMAJORMARKERS"]-3) {
             var thisLabelContent = markerArrays.majorMarkers[i].get("labelContent");
@@ -882,10 +885,16 @@ function showOrHideMarkers(currentZoom) {
             markerArrays.majorMarkers[i].setVisible(false);
         }
     }
+
     for (i = 0; i < markerArrays.bathroomMarkers.length; i++) { 
         markerArrays.bathroomMarkers[i].setVisible(activeState.showBathrooms && currentZoom >= Config.ZOOMDISPLAY["SPECIALMARKERS"]-1);
         markerArrays.bathroomMarkers[i].set("labelVisible", activeState.showBathrooms && currentZoom >= Config.ZOOMDISPLAY["SPECIALMARKERS"]);
     }
+
+    for (i = 0; i < activeState.vanRoutes.length; i++) {
+        activeState.vanRoutes[i].setVisible(activeState.showVanRoutes && currentZoom >= Config.ZOOMDISPLAY["SPECIALMARKERS"]-1);
+    }
+
 }
 
 
@@ -901,10 +910,10 @@ function createLabelLayer(map) {
   activeState.markerArrays = markerArrays;
 
   google.maps.event.addListener(map, 'zoom_changed', function() {
-	showOrHideMarkers(map.getZoom());
+	showOrHideElements(map.getZoom());
    });
 
-  showOrHideMarkers(map.getZoom());
+  showOrHideElements(map.getZoom());
 
 }
 
@@ -1010,11 +1019,32 @@ function getSegmentConfigs() {
 }
 
 
-function createSegmentLayer(map) {
+function getVanRouteConfigs() {
+  // Paste segment configurations into the return [ ] array
 
-    var segmentConfigs = getSegmentConfigs();
+  return [
+        {
+          title: 'Highland Park / Reservoir', 
+          segmentType: 'VAN', 
+          pointsAsKMLStrings: '-73.889510,40.686930,0.0 -73.888930,40.685570,0.0 -73.888730,40.685400,0.0 -73.888450,40.685270,0.0 -73.888150,40.685240,0.0 -73.886120,40.686000,0.0 -73.884550,40.686680,0.0 -73.884250,40.686740,0.0'.split(' ') 
+        }, { 
+          title: 'Rockaways Bypass Boardwalk', 
+          segmentType: 'VAN', 
+          pointsAsKMLStrings: '-73.815800,40.583790,0.0 -73.815360,40.583760,0.0 -73.810220,40.585070,0.0 -73.807390,40.586150,0.0 -73.800790,40.586710,0.0 -73.800700,40.586610,0.0 -73.800510,40.586630,0.0 -73.800410,40.586760,0.0 -73.800420,40.586830,0.0 -73.798980,40.587200,0.0 -73.794800,40.587980,0.0 -73.791060,40.588500,0.0 -73.789640,40.588830,0.0 -73.789310,40.588940,0.0 -73.789640,40.592050,0.0 -73.789280,40.592140,0.0 -73.783840,40.592000,0.0 -73.772380,40.593190,0.0 -73.771270,40.593500,0.0 -73.770220,40.594010,0.0  -73.768280,40.595190,0.0 -73.767580,40.595380,0.0 -73.765040,40.595670,0.0 -73.764630,40.595780,0.0 -73.761650,40.596060,0.0 -73.760980,40.596070,0.0 -73.760130,40.595980,0.0 -73.759700,40.595890,0.0 -73.759230,40.595700,0.0 -73.757970,40.595270,0.0 -73.754500,40.595030,0.0 -73.749610,40.595090,0.0 -73.747860,40.595250,0.0 -73.744930,40.596170,0.0 -73.738920,40.597940,0.0 -73.738420,40.598030,0.0 -73.737840,40.597920,0.0 -73.737410,40.597650,0.0 -73.737170,40.597270,0.0 -73.737000,40.596730,0.0 -73.737040,40.595600,0.0 -73.737360,40.591230,0.0 -73.737710,40.590120,0.0 -73.737900,40.589940,0.0'.split(' ') 
+        }, { 
+          title: 'Atlantic/Long Beach', 
+          segmentType: 'VAN', 
+          pointsAsKMLStrings: '-73.686900,40.584430,0.0 -73.681330,40.584440,0.0 -73.663880,40.584620,0.0 -73.646920,40.584750,0.0'.split(' ') 
+        }, { 
+          title: 'Connetquot Park', 
+          segmentType: 'VAN', 
+          pointsAsKMLStrings: '-73.169900,40.746260,0.0 -73.168620,40.746570,0.0 -73.168220,40.746800,0.0 -73.167980,40.747050,0.0 -73.167570,40.747310,0.0 -73.166780,40.747510,0.0 -73.164760,40.747850,0.0 -73.162460,40.748300,0.0 -73.160510,40.748620,0.0 -73.158310,40.748600,0.0 -73.155050,40.748080,0.0 -73.152360,40.747780,0.0 -73.149930,40.747770,0.0 -73.146280,40.748190,0.0 -73.141320,40.748430,0.0 -73.137030,40.748930,0.0 -73.133690,40.749400,0.0 -73.132250,40.749610,0.0 -73.127420,40.751040,0.0 -73.126300,40.751340,0.0 -73.124950,40.751530,0.0 -73.123920,40.752960,0.0 -73.125540,40.752770,0.0 -73.126480,40.752430,0.0 -73.128200,40.751620,0.0 -73.129730,40.751030,0.0 -73.131570,40.750390,0.0 -73.132670,40.750090,0.0 -73.134310,40.749680,0.0'.split(' ') 
+        }
+    ];
+}
 
-    //plotPointArrayKMLStrings3(segmentConfigs[segments.length-1].pointsAsKMLStrings, map);  // testing
+function createSegmentArray(map, segmentConfigs) {
+    var segmentArray = [];
 
     for (var segNum = 0; segNum < segmentConfigs.length; segNum++) {
 	var latLngArray = [];
@@ -1025,8 +1055,19 @@ function createSegmentLayer(map) {
             }
         }
 
-        addStyledLine(latLngArray, map, segmentConfigs[segNum].segmentType, segmentConfigs[segNum].title);
+        segmentArray.push(addStyledLine(latLngArray, map, segmentConfigs[segNum].segmentType, segmentConfigs[segNum].title));
     }
+
+    return segmentArray;
+}
+
+function createSegmentLayer(map) {
+
+    var segmentConfigs = getSegmentConfigs();
+
+    createSegmentArray(map, segmentConfigs);
+
+    activeState.vanRoutes = createSegmentArray(map, getVanRouteConfigs());  // again, less than perfect design, must fix
 }
 
 function createSliderButtonHtml(onclickFunctionName, currentState) {
@@ -1040,8 +1081,11 @@ function createSliderButtonHtml(onclickFunctionName, currentState) {
 }
 
 function createButtonTable() {
-    function addRow(label, onclickFunctionName, currentState) { // Utility
-        return '<tr><td><b>' + label + '</b></td> <td>' + createSliderButtonHtml(onclickFunctionName, currentState) + '</td> </tr>';
+    function addRow(label, onclickFunctionName, currentState, optionalIcon) { // Utility
+        var rowHtml = '<tr><td><b>' + label + '</b></td>';
+        rowHtml += '<td>' + (optionalIcon || '') + '</td>';
+        rowHtml += ' <td>' + createSliderButtonHtml(onclickFunctionName, currentState) + '</td> </tr>';
+        return rowHtml;
     }
 
     var htmlOutput = '';
@@ -1049,18 +1093,43 @@ function createButtonTable() {
         htmlOutput += '<!-- Settings table -->';
         htmlOutput += '<table>';
         if (InitialSettings.allowGeolocate) {
-            htmlOutput += addRow('Geolocation', 'handleGeolocate', activeState.showGeolocate);
+            var circleSVG = '<circle cx="20" cy="10" r="8" stroke="#000080" stroke-width="2" fill="#0060F0" />';
+            var thisIcon = '<div>' + makeSVG(40, 20, circleSVG) + '</div>';
+            htmlOutput += addRow('Show Location', 'handleGeolocate', activeState.showGeolocate, thisIcon);
         }
         if (InitialSettings.allowBathrooms) {
-            htmlOutput += addRow('Show Bathrooms', 'handleBathrooms', activeState.showBathrooms);
+            var wedgeSVG = '';
+            wedgeSVG += '<line x1="15" y1="20" x2="20" y2="5" stroke="#800080" stroke-width="2" fill="none" />';
+            wedgeSVG += '<line x1="20" y1="5" x2="25" y2="20" stroke="#800080" stroke-width="2" fill="none" />';
+            wedgeSVG += '<line x1="25" y1="20" x2="20" y2="15" stroke="#800080" stroke-width="2" fill="none" />';
+            wedgeSVG += '<line x1="20" y1="15" x2="15" y2="20" stroke="#800080" stroke-width="2" fill="none" />';
+            var thisIcon = '<div>' + makeSVG(40, 20, wedgeSVG)  + '</div>';
+            htmlOutput += addRow('Show Bathrooms', 'handleBathrooms', activeState.showBathrooms, thisIcon);
         }
         if (InitialSettings.allowVanRoutes) {
-            htmlOutput += addRow('Show Van Route', 'handleVanRoutes', activeState.showVanRoutes);
+            var hatchedSVG = createHatchedGraySVG(10, 10);
+            var thisIcon = '<div>' + makeSVG(40, 20, hatchedSVG)  + '</div>';
+            htmlOutput += addRow('Show Van Routes', 'handleVanRoutes', activeState.showVanRoutes, thisIcon);
         }
         htmlOutput += '</table>';
     }
 
     return htmlOutput;
+}
+
+
+function makeSVG(width, height, object) {
+    var svgText = '<svg width="' + width + '" height="' + height + '" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg"><g>';
+    svgText += object + '</g></svg>';
+    return svgText;
+}
+
+function createHatchedGraySVG(repetitions, yvalue) {
+    var resultSVG = '';
+    for (var i=1; i< repetitions; i++) {
+        resultSVG += '<line x1="' + (i*5-2) + '" y1="' + (yvalue+4) + '" x2="' + (i*5+2) + '" y2="' + yvalue + '" stroke-width="2" stroke="#808080" fill="none" />';
+    }
+    return resultSVG;
 }
 
 
@@ -1073,35 +1142,33 @@ function createLegend(map) {
         legend.appendChild(div);
     }
 
-    function makeSVG(width, height, object) {
-        var svgText = '<svg width="' + width + '" height="' + height + '" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg"><g>';
-        svgText += object + '</g></svg>';
-        return svgText;
-    }
-
     appendToLegend(legend, '<span style="color:blue;"><b>Road</b> (open access)</span>');
     var solidLineSegment = '<line x1="0" y1="4" x2="25" y2="2" stroke-width="2.5" stroke="#0000CD" fill="none" id="svg_1_1"/>';
     solidLineSegment += '<line x1="25" y1="2" x2="60" y2="3" stroke-width="2.5" stroke="#0000CD" fill="none" id="svg_1_2"/>';
-    solidLineSegment += '<line x1="60" y1="3" x2="120" y2="6" stroke-width="2.5" stroke="#0000CD" fill="none" id="svg_1_2"/>';
+    solidLineSegment += '<line x1="60" y1="3" x2="150" y2="6" stroke-width="2.5" stroke="#0000CD" fill="none" id="svg_1_2"/>';
     appendToLegend(legend, makeSVG(100, 8, solidLineSegment));
 
     appendToLegend(legend, '<span style="color:blue;"><b>Bridge</b> (no van access)</span>');
     var dashedLineSegment = '';
-    for (var i=0; i< 6; i++) {
+    for (var i=0; i< 8; i++) {
         dashedLineSegment += '<line x1="' + (i*20) + '" y1="' + (1+i/2) + '" x2="' + (i*20+15) + '" y2="' + (1.5+i/2) + '" stroke-width="3" stroke="#0000CD" fill="none" id="svg_3_' + i + '"/>';
     }
     appendToLegend(legend, makeSVG(100, 8, dashedLineSegment));
 
     appendToLegend(legend, '<span style="color:#006400;"><b>Trail</b> (no van access)</span>');
-    var dottedLineSegment = '<line x1="0" y1="1" x2="120" y2="1" stroke-width="5" stroke="#D0F7C7" fill="none" id="svg_3_0"/>';
-    for (var i=1; i< 20; i++) {
+    var dottedLineSegment = '<line x1="0" y1="1" x2="150" y2="1" stroke-width="5" stroke="#D0F7C7" fill="none" id="svg_3_0"/>';
+    for (var i=1; i< 25; i++) {
         dottedLineSegment += '<line x1="' + (i*6) + '" y1="1" x2="' + (i*6+3) + '" y2="1" stroke-width="3" stroke="#008000" fill="none" id="svg_3_' + i + '"/>';
     }
     appendToLegend(legend, makeSVG(100, 8, dottedLineSegment));
 
+    appendToLegend(legend, '<span style="color:#404040;"><b>Van Route</b></span>');
+    var hatchedLineSegment = createHatchedGraySVG(30, 1);
+    appendToLegend(legend, makeSVG(100, 8, hatchedLineSegment));
+
 /* // Suppress 'difficult' from legend
     appendToLegend(legend, '<span style="color:#800000;"><b>Difficult</b> (use caution)</span>');
-    var solidLineSegment2 = '<line x1="0" y1="4" x2="120" y2="1" stroke-width="2.5" stroke="#800000" fill="none" id="svg_4_1"/>';
+    var solidLineSegment2 = '<line x1="0" y1="4" x2="150" y2="1" stroke-width="2.5" stroke="#800000" fill="none" id="svg_5_1"/>';
     appendToLegend(legend, makeSVG(100, 8, solidLineSegment2));
 */
 
@@ -1135,6 +1202,9 @@ function createLegend(map) {
 
     popupLegend += '<div><span style="color:#006400;"><b>Trail</b> (limited access)</span></div>';
     popupLegend += '<div>' + makeSVG(150, 8, dottedLineSegment) + '</div>';
+
+    popupLegend += '<div><span style="color:#404040;"><b>Van Route</b> (between segments)</span></div>';
+    popupLegend += '<div>' + makeSVG(150, 8, hatchedLineSegment) + '</div>';
 
 /* // Suppress 'difficult' from legend
     popupLegend += '<div><span style="color:#800000;"><b>Difficult</b> (tricky segment, be careful)</span></div>';
@@ -1235,15 +1305,22 @@ function handleBathrooms(checkbox) {
     }
 
     // Just by calling the redraw function, it will either display or hide markers based on activeState.showBathrooms
-    showOrHideMarkers(activeState.map.getZoom());
+    showOrHideElements(activeState.map.getZoom());
 
 }
 
 function handleVanRoutes(checkbox) {
     activeState.showVanRoutes = checkbox.checked;
-    if (activeState.openIW) {
-        activeState.openIW.close();
+
+    if (checkbox.checked) {
+        // If zoomed out too far, zoom in some
+        if (activeState.map.getZoom() < Config.ZOOMDISPLAY["SPECIALMARKERS"]-1) {
+            activeState.map.setZoom(Config.ZOOMDISPLAY["SPECIALMARKERS"]-1);
+        }
     }
+
+    // Just by calling the redraw function, it will either display or hide van routes based on activeState.showVanRoutes
+    showOrHideElements(activeState.map.getZoom());
 }
 
 
