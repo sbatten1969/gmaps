@@ -7,7 +7,7 @@
     var InitialSettings = { // Configure these items first when creating a new map
         title: 'H6H Customized Map',   // Page title and also shows up in legend details
         startLatitude : 40.72,         // Map initial center point, unless overridden
-        startLongitude : -73.95+0.7,   // Map initial center point, unless overridden
+        startLongitude : -73.95 + 0.7,   // Map initial center point, unless overridden
         allowGeolocate : true,        // If true, allow user to activate Geolocation feature
         allowBathrooms : true,        // If true, allow user to display bathrooms near the course. Requires programmer to actually implement bathroom points!
         allowVanRoutes : false,        // If true, allow user to display alternate van routes. Requires programmer to actually implement van routes!
@@ -33,70 +33,30 @@
   <script src="https://maps.googleapis.com/maps/api/js?v=3.exp&key=AIzaSyD6s-RAR1ycQsIPdZihOI5JSfZaGSIgc0M"></script>
 
   <script type="text/javascript" src="https://sbatten1969.github.io/gmaps/markerwithlabel.js"></script>
-  <script type="text/javascript" src="./createmap.js"></script>
 
-  <script src="./geolocation-marker.js"></script>
+  <script type="text/javascript" src="./createmap.js"></script>
+  <script type="text/javascript" src="./geolocation-marker.js"></script>
 
 
 <script>
-
-
-function readURLParams(startOptions) {
-
-  function isNumeric(n) {
-    return !isNaN(parseFloat(n)) && isFinite(n);
-  }
-
-  if (location.search.substring(1).length > 0) {
-      var parameters = location.search.substring(1).split("&");
-      if (parameters.length > 0) {
-          var latLngZoomLiteral = parameters[0].split(',');
-          if ((latLngZoomLiteral.length >= 2)
-                  && isNumeric(latLngZoomLiteral[0]) && isNumeric(latLngZoomLiteral[1])) {
-              startOptions.startLatitude =  latLngZoomLiteral[0];
-              startOptions.startLongitude = latLngZoomLiteral[1];
-              if ((latLngZoomLiteral.length >= 3) && isNumeric(latLngZoomLiteral[2])) {
-                  startOptions.zoomLevel = Number(latLngZoomLiteral[2]);
-              }
-          }
-      }
-  }
-
-}
-
-function initialize() {
-
-  var startOptions = {
-      zoomLevel : 10,
-      startLatitude : InitialSettings.startLatitude,
-      startLongitude : InitialSettings.startLongitude
-    };
-
-  readURLParams(startOptions);
-
-  var map = createMapObject(startOptions);
-
-  createSegmentLayer(map);
-
-  createLabelLayer(map);
-
-  createLegend(map);
-
-}
-
+"use strict";
 
 // Colors constant is set here, before everything else, in case any of the initialization routines need well-defined colors.
 var Colors = {
     BLACK : '#000000',
     DARK_GREY : '#404040',
+    MODERATE_GREY : '#606060',
     LIGHT_GREY : '#808080',  // Caution: works as a background or fill color only; does not work as foreground color
+    FAINT_GREY : '#C0C0C0',
     WHITE : '#FFFFFF',
     MEDIUM_BLUE : '#0000CD',
+    GREENISH_BLUE : '#0060F0',
     DARK_RED : '#800000',
     MEDIUM_RED : '#CC0000',
     BRIGHT_RED : '#FF0000',
     DARK_GREEN : '#006400',
     BRIGHT_GREEN : '#00FF00',
+    FAINT_GREEN : '#D0F7C7',
     MEDIUM_PURPLE : '#A000A0',
     BRIGHT_PURPLE : '#FF00FF'
   };
@@ -107,9 +67,7 @@ if (Object.freeze) {
 }
 
 
-
 // Global configuration constants
-
 
 var _iconpath = { // short-lifecycle object to be used in creation of icons
     CIRCLE : google.maps.SymbolPath.CIRCLE,
@@ -121,7 +79,7 @@ var _iconpath = { // short-lifecycle object to be used in creation of icons
 
 var _metaConfig = { // short-lifecycle object to be used in creation of config
     STANDARD_OPACITY : 0.6,
-    STANDARD_SCALE : 3.0,   // 3 == reasonably thick lines and icons without being overly large
+    STANDARD_SCALE : 3.0,   // 3: reasonably thick lines and icons without being overly large
 
     createDiamond : function(scale, strokeweight) {
         return {
@@ -148,10 +106,10 @@ var _metaConfig = { // short-lifecycle object to be used in creation of config
     createWedgeUp : function(scale, strokeweight) {
         return {
 	      path: _iconpath.WEDGE_UP,
-              scale: scale,  // for circle, scale must be larger than diamond -- STANDARD_SCALE for large, 67% of STANDARD_SCALE for medium.  Less than 40% of STANDARD_SCALE may be too small
+              scale: scale,  // for wedge, scale must be similar to circle
 	      strokeWeight: strokeweight,
 	      fillColor: Colors.WHITE,
-	      fillOpacity: 0.2, // mostly transparent
+	      fillOpacity: 0.1, // almost completely transparent
 	      strokeColor: Colors.BLACK  // can be reset via colorIcon() function below
           };
       },
@@ -161,28 +119,28 @@ var _metaConfig = { // short-lifecycle object to be used in creation of config
             var thisScale = scale || 1.0;
             return {
                 path : 'M 0,0 0,2',  // Long dash
-                repeat : (scale*5.33) + 'px'    // for line scale=3, repeat of 15-20px is relatively loose spacing
+                repeat : (thisScale*5.33) + 'px'    // for line scale=3, repeat of 15-20px is relatively loose spacing
               };
           },
         createTight : function (scale) {
             var thisScale = scale || 1.0;
             return {
                 path : 'M 0,0 0,2',  // Long dash
-                repeat : (scale*4) + 'px'    // for line scale=3, repeat of 10-12px is relatively tight spacing
+                repeat : (thisScale*4) + 'px'    // for line scale=3, repeat of 10-12px is relatively tight spacing
               };
           },
         createDots : function (scale) {
             var thisScale = scale || 1.0;
             return {
                 path : 'M 0,0 0,0.25',  // Short stubs that end up looking like dots instead of dashes
-                repeat : (scale*2) + 'px'    // for line scale=3, repeat of 5-7px is relatively even spcing
+                repeat : (thisScale*2) + 'px'    // for line scale=3, repeat of 5-7px is relatively even spcing
               };
           },
         createSlashes : function (scale) {
             var thisScale = scale || 1.0;
             return {
                 path : 'M -1,0 0,1',  // Diagonal hatching
-                repeat : (scale*2) + 'px'    // for line scale=3, repeat of 5-7px is relatively even spcing
+                repeat : (thisScale*2) + 'px'    // for line scale=3, repeat of 5-7px is relatively even spcing
               };
           }
       }
@@ -355,22 +313,20 @@ function colorIcon(icon, color) {
 
 
 
-  // options structure: position, icon, labelContent, labelPosition, labelStyle, mouseoverText, infowindowText
+// options structure: position, icon, labelContent, labelPosition, labelStyle, mouseoverText, infowindowText
 
-  function getLabeledMarker(options, mapObject) {
-     var thisLabelStyle = options.labelStyle || { };
+function getLabeledMarker(options, mapObject) {
+    var thisLabelStyle = options.labelStyle || { };
 
-     if (options.labelPosition == LabelPosition.LEFT) {
-         thisLabelStyle.textAlign = 'right';
-     }
-     else if (options.labelPosition == LabelPosition.RIGHT || options.labelPosition == LabelPosition.DEFAULT) {
-         thisLabelStyle.textAlign = 'left';
-     }
-     else {
-         thisLabelStyle.textAlign = 'center';
-     }
+    if (options.labelPosition === LabelPosition.LEFT) {
+        thisLabelStyle.textAlign = 'right';
+    } else if (options.labelPosition === LabelPosition.RIGHT || options.labelPosition === LabelPosition.DEFAULT) {
+        thisLabelStyle.textAlign = 'left';
+    } else {
+        thisLabelStyle.textAlign = 'center';
+    }
 
-     var marker = new MarkerWithLabel({
+    var marker = new MarkerWithLabel({
        position: options.position,
        map: mapObject,
        icon: options.icon,
@@ -381,30 +337,27 @@ function colorIcon(icon, color) {
        labelClass: 'labels',
        labelInBackground: true,
        labelStyle: thisLabelStyle,
-//!       opacity: Config.OPACITY["MARKERSTROKE"],
        opacity: options.strokeOpacity,
        title: options.mouseoverText
-     });
+      });
 
-     if (options.infowindowText) {
+    if (options.infowindowText) {
         var iw = new google.maps.InfoWindow({
-          content: options.infowindowText
-        });
+            content: options.infowindowText
+          });
         google.maps.event.addListener(marker, "click", function (e) { iw.open(mapObject, this); });
 
         if (Config.INFOWINDOW_TIMEOUT) {  // If the configuration timeout is > 0, have the window close after mouse is removed
-
             google.maps.event.addListener(marker, "mouseout", 
                 function (e) { 
                     setTimeout(function () { iw.close(); }, Config.INFOWINDOW_TIMEOUT);  // This closes the infowindow (if open) a short amount of time after removing mouse
                 }
               );
         }
-     }
+    }
 
-     return marker;
-  }
-
+    return marker;
+}
 
 
   function plotPointArrayKMLStrings3(arrayOfLngLatStrings, mapObject) {
@@ -438,92 +391,90 @@ function colorIcon(icon, color) {
   }
 
 
-  // Signature: addPolyline(linePathArray, mapObject, lineOptions)
-  // lineOptions members:  strokeOpacity, strokeWeight, strokeColor, optional icons[], optional infowindowText
-  // icons[] must have member objects of the form { icon(==path), offset=='0', repeat=='15px' for normal, '12px' for tight ]
+// Signature: addPolyline(linePathArray, mapObject, lineOptions)
+// lineOptions members:  strokeOpacity, strokeWeight, strokeColor, optional icons[], optional infowindowText
+// icons[] must have member objects of the form { icon(==path), offset=='0', repeat=='15px' for normal, '12px' for tight ]
 
-  function addPolyline(linePathArray, mapObject, lineOptions) {
-      var polyLine = new google.maps.Polyline({
-	    path: linePathArray,
-	    strokeOpacity: lineOptions.strokeOpacity,
-	    icons: lineOptions.icons || [ ],
-	    strokeColor: lineOptions.strokeColor || Colors.BLACK,
-	    strokeWeight: lineOptions.strokeWeight || 1.0,
-	    map: mapObject
-	  });
+function addPolyline(linePathArray, mapObject, lineOptions) {
+    var polyLine = new google.maps.Polyline({
+        path: linePathArray,
+        strokeOpacity: lineOptions.strokeOpacity,
+        icons: lineOptions.icons || [ ],
+        strokeColor: lineOptions.strokeColor || Colors.BLACK,
+        strokeWeight: lineOptions.strokeWeight || 1.0,
+        map: mapObject
+      });
 
-      if (lineOptions.infowindowText) {
-          var iw = new google.maps.InfoWindow({
-              content: lineOptions.infowindowText
-            });
-          google.maps.event.addListener(polyLine, 'click', 
-              function(event) { 
-                  iw.setPosition(event.latLng);
-                  iw.open(mapObject, this); 
-              }
-            );
+    if (lineOptions.infowindowText) {
+        var iw = new google.maps.InfoWindow({
+            content: lineOptions.infowindowText
+          });
+        google.maps.event.addListener(polyLine, 'click', 
+            function(event) { 
+                iw.setPosition(event.latLng);
+                iw.open(mapObject, this); 
+            }
+          );
 
-          if (Config.INFOWINDOW_TIMEOUT) {  // If the configuration timeout is > 0, have the window close after mouse is removed
+        if (Config.INFOWINDOW_TIMEOUT) {  // If the configuration timeout is > 0, have the window close after mouse is removed
+            google.maps.event.addListener(polyLine, "mouseout", 
+                function (e) { 
+                    setTimeout(function () { iw.close(); }, Config.INFOWINDOW_TIMEOUT);  // This closes the infowindow (if open) a short amount of time after removing mouse
+                }
+              );
+        }
+    }
 
-              google.maps.event.addListener(polyLine, "mouseout", 
-                  function (e) { 
-                      setTimeout(function () { iw.close(); }, Config.INFOWINDOW_TIMEOUT);  // This closes the infowindow (if open) a short amount of time after removing mouse
-                  }
-                );
-          }
-      }
-
-      return polyLine;
-  }
+    return polyLine;
+}
 
 
-  function addStyledLine(linePathArray, mapObject, pathStyleName, titleText) {
-      var thisPathStyle = Config.PATHSTYLE[pathStyleName] || Config.PATHSTYLE["DEFAULT"];
+function addStyledLine(linePathArray, mapObject, pathStyleName, titleText) {
+    var thisPathStyle = Config.PATHSTYLE[pathStyleName] || Config.PATHSTYLE["DEFAULT"];
 
-      var lineOptions = { };
+    var lineOptions = { };
 
-      // lineOptions composition is very different depending on whether the pathstyle is dashed or not
+    // lineOptions composition is very different depending on whether the pathstyle is dashed or not
 
-      var thisLineScale = thisPathStyle.scale || Config.DEFAULT_LINESCALE;
+    var thisLineScale = thisPathStyle.scale || Config.DEFAULT_LINESCALE;
 
-      if (thisPathStyle.dashOptions) {
-          var dashedLineSymbol = {
-              path: thisPathStyle.dashOptions.path,
-              strokeColor: thisPathStyle.foregroundColor,
-              strokeOpacity: thisPathStyle.foregroundOpacity,
-              scale: thisLineScale
-            };
+    if (thisPathStyle.dashOptions) {
+        var dashedLineSymbol = {
+            path: thisPathStyle.dashOptions.path,
+            strokeColor: thisPathStyle.foregroundColor,
+            strokeOpacity: thisPathStyle.foregroundOpacity,
+            scale: thisLineScale
+          };
 
-          lineOptions.strokeColor = thisPathStyle.backgroundColor,
-          lineOptions.strokeWeight = thisLineScale * 2, 
-          lineOptions.strokeOpacity = Config.OPACITY["BACKGROUND"];
-	  lineOptions.icons = [{
-                icon: dashedLineSymbol,
-                offset: '100%',
-                repeat: thisPathStyle.dashOptions.repeat
-            }];
-      }
-      else {
-          lineOptions.strokeColor = thisPathStyle.foregroundColor;
-          lineOptions.strokeWeight = thisLineScale;
-          lineOptions.strokeOpacity = thisPathStyle.foregroundOpacity;
-      }
+        lineOptions.strokeColor = thisPathStyle.backgroundColor;
+        lineOptions.strokeWeight = thisLineScale * 2;
+        lineOptions.strokeOpacity = Config.OPACITY["BACKGROUND"];
+        lineOptions.icons = [{
+            icon: dashedLineSymbol,
+            offset: '100%',
+            repeat: thisPathStyle.dashOptions.repeat
+          }];
+    } else {
+        lineOptions.strokeColor = thisPathStyle.foregroundColor;
+        lineOptions.strokeWeight = thisLineScale;
+        lineOptions.strokeOpacity = thisPathStyle.foregroundOpacity;
+    }
 
-      // If titleText is defined, include it among the options.
-      if (titleText) {
-          lineOptions.infowindowText = titleText;
-      }
+    // If titleText is defined, include it among the options.
+    if (titleText) {
+        lineOptions.infowindowText = titleText;
+    }
 
-      return addPolyline(linePathArray, mapObject, lineOptions);
-  }
+    return addPolyline(linePathArray, mapObject, lineOptions);
+}
 
 
 // Global variables in the 'document' namespace. It would be ideal if they had their own namespace, but not practical given the source of the configuration data in getMarkerConfigs.
 var MARKER_LARGE=0, MARKER_SMALL=1;
 
 function getMarkerConfigs() {
-  // Paste configuration data inside the returned array.
-  return [
+    // Paste configuration data inside the returned array.
+    return [
         { latLngString: '40.720840, -73.951050', size: MARKER_LARGE, labelString: '0.0', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>0.0</b><small> (GPS 40.7208, -73.9511)</small>: START<br><div style='width:200px'>Start at McCarren Park track at Driggs and Lorimer in Brooklyn. Turn Right out of park, head Northeast on Driggs.</div>", mouseoverText: '0.0 START: Head Northeast on Driggs', majorLabel: '0'  }, 
         { latLngString: '40.722170, -73.949870', size: MARKER_SMALL, labelString: '0.1', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>0.1</b>: RIGHT<br><div style='width:200px'>Right on Manhattan Ave.</div>", mouseoverText: '0.1 RIGHT: Manhattan Ave'  }, 
         { latLngString: '40.714370, -73.946070', size: MARKER_SMALL, labelString: '0.7', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>0.7</b>: LEFT<br><div style='width:200px'>Left on Metropolitan Ave. Run on the right side of the street, especially after passing over the Metropolitan Ave bridge.</div>", mouseoverText: '0.7 LEFT: Metropolitan Ave'  }, 
@@ -551,9 +502,9 @@ function getMarkerConfigs() {
         { latLngString: '40.585841, -73.816938', size: MARKER_LARGE, labelString: '14.1', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>14.1</b><small> (GPS 40.5858, -73.8169)</small>: CHECKPOINT<br><div style='width:200px'>WOMAN\'S WAR MEMORIAL (in the middle section where the parking lots are). After taking team photo at checkpoint, take immediate Left onto Cross Bay Parkway.</div>", mouseoverText: '14.1 CHECKPOINT: Women\'s War Memorial. After checkpoint, immediate left onto Cross Bay Parkway'  }, 
         { latLngString: '40.583590, -73.815870', size: MARKER_SMALL, labelString: '14.3', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>14.3</b>: LEFT<br><div style='width:200px'>At end of Cross Bay Parkway, take ramp and turn Left onto Boardwalk. Continue until Beach 41st Street</div>", mouseoverText: '14.3 LEFT: Enter boardwalk'  }, 
         { latLngString: '40.588884, -73.788658', size: MARKER_LARGE, labelString: '15.9', pathStyle: 'TRAIL_PAVED', labelPosition: 'ABOVE', labelDetails: "<b>15.9</b><small> (GPS 40.5889, -73.7887)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Boardwalk at possible exchange/support point: Beach 59th Street Playground (bathrooms).</div>", mouseoverText: '15.9 STRAIGHT: Passing Beach 59th Street Playground'  }, 
-        { latLngString: '40.592480, -73.754130', size: MARKER_SMALL, labelString: '<font color=#800000>Closed</font>', pathStyle: 'INVISIBLE', labelPosition: 'BELOW', labelDetails: "<b><font color=#800000>Closed</font></b>:  <br><div style='width:200px'>Inaccessible boardwalk segment</div>", mouseoverText: '<font color=#800000>Closed</font>  : Inaccessible boardwalk segment'  }, 
+        { latLngString: '40.592480, -73.754130', size: MARKER_SMALL, labelString: '<font color=red>Closed</font>', pathStyle: 'INVISIBLE', labelPosition: 'BELOW', labelDetails: "<b><font color=red>Closed</font></b>:  <br><div style='width:200px'>Inaccessible boardwalk segment</div>", mouseoverText: '<font color=red>Closed</font>  : Inaccessible boardwalk segment'  }, 
         { latLngString: '40.591620, -73.772540', size: MARKER_LARGE, labelString: '16.6', pathStyle: 'TRAIL_PAVED', labelPosition: 'BELOW', labelDetails: "<b>16.6</b><small> (GPS 40.5916, -73.7725)</small>: LEFT<br><div style='width:200px'>Turn Left at Beach 41st St because there is a construction fence ahead.</div>", mouseoverText: '16.6 LEFT: Exit boardwalk at 41st St'  }, 
-        { latLngString: '40.593080, -73.772690', size: MARKER_SMALL, labelString: '16.7', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>16.7</b>: RIGHT<br><div style='width:200px'>Right on Edgemere Ave. Run on sidewalk on RIGHT side of street (with traffic).</div>", mouseoverText: '16.7 RIGHT: Edgemere Ave'  }, 
+        { latLngString: '40.593080, -73.772690', size: MARKER_SMALL, labelString: '16.7', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>16.7</b>: RIGHT<br><div style='width:200px'>Right on Edgemere Ave. Run on sidewalk on RIGHT side of street (with traffic), next to elevated subway line.</div>", mouseoverText: '16.7 RIGHT: Edgemere Ave'  }, 
         { latLngString: '40.595620, -73.764990', size: MARKER_SMALL, labelString: '17.2', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>17.2</b>: STRAIGHT<br><div style='width:200px'>Continue straight to merge onto Seagirt Blvd. Run on RIGHT side of street (with traffic).</div>", mouseoverText: '17.2 STRAIGHT: Seagirt Blvd'  }, 
         { latLngString: '40.595260, -73.747610', size: MARKER_LARGE, labelString: '18.2', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>18.2</b><small> (GPS 40.5953, -73.7476)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Seagirt Blvd at possible exchange/support point: Rockaway Beach Club Park on your right.</div>", mouseoverText: '18.2 STRAIGHT: Passing Rockaway Beach Club'  }, 
         { latLngString: '40.595980, -73.745360', size: MARKER_SMALL, labelString: '18.3', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>18.3</b>: RIGHTISH<br><div style='width:200px'>Take Right at fork onto Seagirt Ave. Stay on sidewalk on right side of street.</div>", mouseoverText: '18.3 RIGHTISH: Seagirt Ave'  }, 
@@ -570,7 +521,7 @@ function getMarkerConfigs() {
         { latLngString: '40.596090, -73.499550', size: MARKER_LARGE, labelString: '24.0', pathStyle: 'TRAIL_PAVED', labelPosition: 'BELOW', labelDetails: "<b>24.0</b><small> (GPS 40.5961, -73.4996)</small>: START<br><div style='width:200px'>Get on the paved pathway starting from Jones Beach field 6.  Head north and take the underpass below Ocean Parkway.</div>", mouseoverText: '24.0 START: Paved Pathway', majorLabel: '24'  }, 
         { latLngString: '40.597450, -73.499970', size: MARKER_SMALL, labelString: '24.1', pathStyle: 'TRAIL_PAVED', labelPosition: 'ABOVE', labelDetails: "<b>24.1</b>: LEFT<br><div style='width:200px'>After passing under Ocean Parkway, turn Left to stay on the paved pathway.</div>", mouseoverText: '24.1 LEFT: Paved Pathway'  }, 
         { latLngString: '40.601760, -73.507110', size: MARKER_SMALL, labelString: '24.7', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>24.7</b>: ENTER PATH<br><div style='width:200px'>After passing by parking lots for Jones Beach Field 5 and the Jones Beach Theater, get on the paved Jones Beach/Wantagh Parkway Bikeway. No van access for next 5 miles!</div>", mouseoverText: '24.7 ENTER PATH: Jones Beach/Wantagh Parkway Bikeway'  }, 
-        { latLngString: '40.596170, -73.499910', size: MARKER_SMALL, labelString: '<font color=#800000>NEW</font>', pathStyle: 'INVISIBLE', labelPosition: 'LEFT', labelDetails: "<b><font color=#800000>NEW</font></b>:  <br><div style='width:200px'>Section was added to avoid possible field 5 closure</div>", mouseoverText: '<font color=#800000>NEW</font>  : Section was added to avoid possible field 5 closure'  }, 
+        { latLngString: '40.596170, -73.499910', size: MARKER_SMALL, labelString: '<font color=blue>NEW</font>', pathStyle: 'INVISIBLE', labelPosition: 'LEFT', labelDetails: "<b><font color=blue>NEW</font></b>:  <br><div style='width:200px'>Section was added to avoid possible field 5 closure</div>", mouseoverText: '<font color=blue>NEW</font>  : Section was added to avoid possible field 5 closure'  }, 
         { latLngString: '40.659700, -73.507050', size: MARKER_SMALL, labelString: '29.2', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>29.2</b>: LEFT<br><div style='width:200px'>Path ends at small park roadway. Turn Left and follow the road to the north to exit the park.</div>", mouseoverText: '29.2 LEFT: Park roadway (to park exit)'  }, 
         { latLngString: '40.664852, -73.507617', size: MARKER_LARGE, labelString: '29.7', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>29.7</b><small> (GPS 40.6649, -73.5076)</small>: RIGHT<br><div style='width:200px'>Cross Merrick Road and turn Right (run against traffic, on left side of street).</div>", mouseoverText: '29.7 RIGHT: Merrick Road', majorLabel: '30'  }, 
         { latLngString: '40.666765, -73.475815', size: MARKER_LARGE, labelString: '31.4', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>31.4</b><small> (GPS 40.6668, -73.4758)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Merrick Blvd at possible exchange/support point: Hicksville Rd has a Sunoco, Starbucks, All-American Burger and other stores.</div>", mouseoverText: '31.4 STRAIGHT: Passing Sunoco across from Starbucks'  }, 
@@ -582,7 +533,7 @@ function getMarkerConfigs() {
         { latLngString: '40.690970, -73.359393', size: MARKER_SMALL, labelString: '38.5', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>38.5</b>: STRAIGHT<br><div style='width:200px'>Continue straight as road name changes to Railroad Ave aka County Rd 12.</div>", mouseoverText: '38.5 STRAIGHT: Road becomes Railroad Ave (aka Cty Rd 12)'  }, 
         { latLngString: '40.696370, -73.339200', size: MARKER_SMALL, labelString: '39.5', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>39.5</b>: RIGHT<br><div style='width:200px'>Right on Stowe Ave.</div>", mouseoverText: '39.5 RIGHT: Stowe Ave'  }, 
         { latLngString: '40.695980, -73.338790', size: MARKER_SMALL, labelString: '39.6', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>39.6</b>: LEFT<br><div style='width:200px'>First Left on Robert St.</div>", mouseoverText: '39.6 LEFT: Robert St'  }, 
-        { latLngString: '40.696590, -73.336520', size: MARKER_SMALL, labelString: '39.7', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>39.7</b>: STRAIGHT<br><div style='width:200px'>Straight on Cameron Ave.</div>", mouseoverText: '39.7 STRAIGHT: Cameron Ave'  }, 
+        { latLngString: '40.696590, -73.336520', size: MARKER_SMALL, labelString: '39.7', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>39.7</b>: STRAIGHT<br><div style='width:200px'>Straight on Cameron Ave, crossing Little East Neck Rd.</div>", mouseoverText: '39.7 STRAIGHT: Cameron Ave'  }, 
         { latLngString: '40.696940, -73.335120', size: MARKER_SMALL, labelString: '39.8', pathStyle: 'ROAD_OPEN', labelPosition: 'RIGHT', labelDetails: "<b>39.8</b>: LEFT-RIGHT<br><div style='width:200px'>Left onto Litchfield Ave, then immediate Right on Cameron Ave.</div>", mouseoverText: '39.8 LEFT-RIGHT: Left: Litchfield Ave, immediate right: Cameron Ave'  }, 
         { latLngString: '40.697980, -73.332060', size: MARKER_SMALL, labelString: '39.9', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>39.9</b>: LEFT<br><div style='width:200px'>Left on Argyle Ave.</div>", mouseoverText: '39.9 LEFT: Argyle Ave'  }, 
         { latLngString: '40.698290, -73.332200', size: MARKER_SMALL, labelString: '40.0', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>40.0</b>: RIGHT<br><div style='width:200px'>Right (immediately) on Trolley Line Rd/Railroad Ave.</div>", mouseoverText: '40.0 RIGHT: Trolley Line Rd/Railroad Ave'  }, 
@@ -593,7 +544,7 @@ function getMarkerConfigs() {
         { latLngString: '40.724560, -73.251410', size: MARKER_LARGE, labelString: '44.7', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>44.7</b><small> (GPS 40.7246, -73.2514)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Union Blvd (County Rd 50) at possible exchange/support point: 7-Eleven at 4th Ave and Union Blvd.</div>", mouseoverText: '44.7 STRAIGHT: Passing Fourth Ave'  }, 
         { latLngString: '40.733950, -73.210670', size: MARKER_LARGE, labelString: '47.0', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>47.0</b><small> (GPS 40.7340, -73.2107)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Union Blvd (County Rd 50) at possible exchange/support point: 7-Eleven at Nassau Ave and Union Blvd.</div>", mouseoverText: '47.0 STRAIGHT: Passing Nassau Ave'  }, 
         { latLngString: '40.737890, -73.168390', size: MARKER_SMALL, labelString: '49.2', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>49.2</b>: LEFT<br><div style='width:200px'>Left on Connetquot Ave. Run in bike lane on LEFT SIDE and watch out for traffic.</div>", mouseoverText: '49.2 LEFT: Connetquot Ave'  }, 
-        { latLngString: '40.740299, -73.168817', size: MARKER_LARGE, labelString: '49.4', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>49.4</b><small> (GPS 40.7403, -73.1688)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Connetquot Ave at possible exchange/support point: Great River Train Station at Hawthorne Ave. Stay on side walk on left side of road (run against traffic).</div>", mouseoverText: '49.4 STRAIGHT: Passing Great River train station', majorLabel: '49'  }, 
+        { latLngString: '40.740299, -73.168817', size: MARKER_LARGE, labelString: '49.4', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>49.4</b><small> (GPS 40.7403, -73.1688)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Connetquot Ave at possible exchange/support point: Great River Train Station at Hawthorne Ave. Stay on sidewalk on left side of road (run against traffic).</div>", mouseoverText: '49.4 STRAIGHT: Passing Great River train station', majorLabel: '49'  }, 
         { latLngString: '40.748295, -73.170316', size: MARKER_SMALL, labelString: '50.0', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>50.0</b>: RIGHT<br><div style='width:200px'>Right to Enter paved Bike Path after passing over the bridge over Sunrise Highway, directly after the exit ramp.</div>", mouseoverText: '50.0 RIGHT: Enter paved Bike Path'  }, 
         { latLngString: '40.750385, -73.135100', size: MARKER_LARGE, labelString: '51.9', pathStyle: 'TRAIL_PAVED', labelPosition: 'ABOVE', labelDetails: "<b>51.9</b><small> (GPS 40.7504, -73.1351)</small>: STRAIGHT<br><div style='width:200px'>Cross Pond Road, continue on Bike Path parallel to Sunrise Hwy. The path moves behind a shopping center containing a Piano Lounge and a western wear shop. (Possible exchange/support spot.)</div>", mouseoverText: '51.9 STRAIGHT: Cross Pond Road, continue on Bike Path'  }, 
         { latLngString: '40.753000, -73.123790', size: MARKER_SMALL, labelString: '52.6', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>52.6</b>: RIGHT<br><div style='width:200px'>At the end of the bike path, cross Oakdale-Bohemia Rd and turn Right.</div>", mouseoverText: '52.6 RIGHT: Oakdale-Bohemia Rd'  }, 
@@ -629,17 +580,17 @@ function getMarkerConfigs() {
         { latLngString: '40.784850, -72.916680', size: MARKER_SMALL, labelString: '68.6', pathStyle: 'ROAD_OPEN', labelPosition: 'RIGHT', labelDetails: "<b>68.6</b>: STRAIGHT<br><div style='width:200px'>Continue straight to merge onto at Montauk Hwy aka County Rd 80. Stay on the right side of the road.</div>", mouseoverText: '68.6 STRAIGHT: Merge onto Montauk Hwy (aka Cty Rd 80)'  }, 
         { latLngString: '40.787050, -72.917050', size: MARKER_LARGE, labelString: '68.8', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>68.8</b><small> (GPS 40.7871, -72.9171)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Montauk Hwy at possible exchange/support point:  Carman Ave gas station. After passing, switch to the LEFT side for better sidewalks and shoulders.</div>", mouseoverText: '68.8 STRAIGHT: Passing Carman Ave'  }, 
         { latLngString: '40.800810, -72.880900', size: MARKER_SMALL, labelString: '71.0', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>71.0</b>: RIGHT<br><div style='width:200px'>Right on Smith Rd (cross at traffic light).</div>", mouseoverText: '71.0 RIGHT: Smith Rd'  }, 
-        { latLngString: '40.796620, -72.879880', size: MARKER_LARGE, labelString: '71.3', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>71.3</b><small> (GPS 40.7966, -72.8799)</small>: LEFT<br><div style='width:200px'>Left on Northern Blvd. There is no street sign, it is immediately after the train tracks.</div>", mouseoverText: '71.3 LEFT: Northern Blvd', majorLabel: '71'  }, 
+        { latLngString: '40.796620, -72.879880', size: MARKER_LARGE, labelString: '71.3', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>71.3</b><small> (GPS 40.7966, -72.8799)</small>: LEFT<br><div style='width:200px'>Left on Northern Blvd. There may be no street sign, it is immediately after the train tracks.</div>", mouseoverText: '71.3 LEFT: Northern Blvd', majorLabel: '71'  }, 
         { latLngString: '40.797980, -72.867770', size: MARKER_SMALL, labelString: '71.9', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>71.9</b>: RIGHT<br><div style='width:200px'>Right on Surrey Circle.</div>", mouseoverText: '71.9 RIGHT: Surrey Circle'  }, 
         { latLngString: '40.798350, -72.864450', size: MARKER_SMALL, labelString: '72.2', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>72.2</b>: RIGHT<br><div style='width:200px'>Right on Northern Blvd, which becomes Patchogue Ave.</div>", mouseoverText: '72.2 RIGHT: Northern Blvd aka Patchogue Ave'  }, 
         { latLngString: '40.801060, -72.840540', size: MARKER_SMALL, labelString: '73.5', pathStyle: 'ROAD_OPEN', labelPosition: 'RIGHT', labelDetails: "<b>73.5</b>: LEFT<br><div style='width:200px'>Left on Mastic Rd.</div>", mouseoverText: '73.5 LEFT: Mastic Rd'  }, 
-        { latLngString: '40.806280, -72.837450', size: MARKER_LARGE, labelString: '73.9', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>73.9</b><small> (GPS 40.8063, -72.8375)</small>: RIGHT<br><div style='width:200px'>Cross Montauk Highway aka County Rd 80 and turn Right (running north/east against traffic).</div>", mouseoverText: '73.9 RIGHT: Montauk Highway'  }, 
+        { latLngString: '40.806280, -72.837450', size: MARKER_LARGE, labelString: '73.9', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>73.9</b><small> (GPS 40.8063, -72.8375)</small>: RIGHT<br><div style='width:200px'>Cross Montauk Highway aka County Rd 80 and turn Right (running east against traffic).</div>", mouseoverText: '73.9 RIGHT: Montauk Highway'  }, 
         { latLngString: '40.804310, -72.813410', size: MARKER_SMALL, labelString: '75.3', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>75.3</b>: LEFTISH<br><div style='width:200px'>Left at fork to Moriches Bypass / County Rd 98, also known as Frowein Rd.</div>", mouseoverText: '75.3 LEFTISH: Moriches Bypass aka Frowein Rd'  }, 
         { latLngString: '40.812320, -72.764260', size: MARKER_SMALL, labelString: '77.9', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>77.9</b>: RIGHT<br><div style='width:200px'>Right on Pine St (cross at traffic light).</div>", mouseoverText: '77.9 RIGHT: Pine St'  }, 
         { latLngString: '40.809900, -72.763940', size: MARKER_LARGE, labelString: '78.1', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>78.1</b><small> (GPS 40.8099, -72.7639)</small>: LEFT<br><div style='width:200px'>First Left on Railroad Ave.</div>", mouseoverText: '78.1 LEFT: Railroad Ave'  }, 
         { latLngString: '40.811360, -72.757420', size: MARKER_SMALL, labelString: '78.5', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>78.5</b>: RIGHT<br><div style='width:200px'>Railroad Ave dead ends for cars, but runners can go straight to pass over a small field. Then turn Right on Montauk Highway.</div>", mouseoverText: '78.5 RIGHT: Montauk Highway'  }, 
         { latLngString: '40.809710, -72.757850', size: MARKER_SMALL, labelString: '78.6', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>78.6</b>: LEFT<br><div style='width:200px'>First Left on Woodlawn Ave.</div>", mouseoverText: '78.6 LEFT: Woodlawn Ave'  }, 
-        { latLngString: '40.811630, -72.747450', size: MARKER_SMALL, labelString: '79.2', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>79.2</b>: LEFT<br><div style='width:200px'>Left on E Moriches Blvd. There is no street sign. It\'s the only left turn that is about a half mile in, across from a bunch of greenhouses.</div>", mouseoverText: '79.2 LEFT: E Moriches Blvd '  }, 
+        { latLngString: '40.811630, -72.747450', size: MARKER_SMALL, labelString: '79.2', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>79.2</b>: LEFT<br><div style='width:200px'>Left on E Moriches Blvd. There may be no street sign. It\'s the only left turn that is about a half mile in, across from a bunch of greenhouses.</div>", mouseoverText: '79.2 LEFT: E Moriches Blvd '  }, 
         { latLngString: '40.813620, -72.747760', size: MARKER_SMALL, labelString: '79.3', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>79.3</b>: RIGHT<br><div style='width:200px'>Take first Right on to stay on E Moriches Blvd (do NOT continue straight onto Locust Ave).</div>", mouseoverText: '79.3 RIGHT: Continue on E Moriches Blvd '  }, 
         { latLngString: '40.825896, -72.731489', size: MARKER_LARGE, labelString: '80.5', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>80.5</b><small> (GPS 40.8259, -72.7315)</small>: STRAIGHT<br><div style='width:200px'>Continue straight as road becomes Union Ave, crossing over Montauk Hwy.</div>", mouseoverText: '80.5 STRAIGHT: Continue on Union Ave', majorLabel: '80'  }, 
         { latLngString: '40.831570, -72.733310', size: MARKER_SMALL, labelString: '80.9', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>80.9</b>: RIGHT<br><div style='width:200px'>Right on Old Country Rd aka County Rd 71. Caution: This road has narrow shoulders in parts. Stay on the left side for best conditions, but stay safe!</div>", mouseoverText: '80.9 RIGHT: Old Country Rd'  }, 
@@ -665,99 +616,98 @@ function getMarkerConfigs() {
         { latLngString: '40.918220, -72.670850', size: MARKER_SMALL, labelString: '107.0', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>107.0</b>: RIGHT<br><div style='width:200px'>Right on Sweezy Ave.</div>", mouseoverText: '107.0 RIGHT: Sweezy Ave'  }, 
         { latLngString: '40.920540, -72.672690', size: MARKER_SMALL, labelString: '107.2', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>107.2</b>: LEFT<br><div style='width:200px'>Left on Pulaski St.</div>", mouseoverText: '107.2 LEFT: Pulaski St'  }, 
         { latLngString: '40.920330, -72.673170', size: MARKER_LARGE, labelString: '107.2', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>107.2</b><small> (GPS 40.9203, -72.6732)</small>: END<br><div style='width:200px'>End at Polish Hall of Riverhead at 214 Marcy Ave, corner of Pulaski and Marcy.</div>", mouseoverText: '107.2 END: Polish Hall of Riverhead', majorLabel: '107'  }, 
-    ];
+      ];
 }
 
 
 function createThreeMarkerArrays(markerConfigs, map) {
-  var majorMarkers = [];
-  var allLargeMarkers = [];
-  var allSmallMarkers = [];
+    var majorMarkers = [];
+    var allLargeMarkers = [];
+    var allSmallMarkers = [];
 
-  for (var i=0; i<markerConfigs.length; i++) {
-      var thisMarkerConfig = markerConfigs[i];
-      if (!thisMarkerConfig) { // make sure it's defined
-          continue;
-      }
+    for (var i=0; i<markerConfigs.length; i++) {
+        var thisMarkerConfig = markerConfigs[i];
+        if (!thisMarkerConfig) { // make sure it's defined
+            continue;
+        }
 
-      var thisLatLngArray = thisMarkerConfig.latLngString.split(',');
-      var thisIcon = (thisMarkerConfig.size == MARKER_LARGE) ? Config.ICON["DIAMOND"].large : Config.ICON["CIRCLE"].medium;
-      var thisPathStyle = Config.PATHSTYLE[thisMarkerConfig.pathStyle];
+        var thisLatLngArray = thisMarkerConfig.latLngString.split(',');
+        var thisIcon = (thisMarkerConfig.size === MARKER_LARGE) ? Config.ICON["DIAMOND"].large : Config.ICON["CIRCLE"].medium;
+        var thisPathStyle = Config.PATHSTYLE[thisMarkerConfig.pathStyle];
 
-      // Font size: for visible markers (vast majority), MARKER_LARGE --> LABELFONT.large; MARKER_SMALL --> LABELFONT.medium.
-      // But for invisible markers, MARKER_LARGE --> font medium; MARKER_SMALL --> font small
-      var thisFontSize = Config.LABELFONT.medium; // default
-      if (thisMarkerConfig.size == MARKER_LARGE) {
-          thisFontSize = (thisPathStyle != Config.PATHSTYLE.INVISIBLE && thisMarkerConfig.labelString.length < 5) 
+        // Font size: for visible markers (vast majority), MARKER_LARGE --> LABELFONT.large; MARKER_SMALL --> LABELFONT.medium.
+        // But for invisible markers, MARKER_LARGE --> font medium; MARKER_SMALL --> font small
+        var thisFontSize = Config.LABELFONT.medium; // default
+        if (thisMarkerConfig.size === MARKER_LARGE) {
+            thisFontSize = (thisPathStyle !== Config.PATHSTYLE.INVISIBLE && thisMarkerConfig.labelString.length < 5) 
 		? Config.LABELFONT.large : Config.LABELFONT.medium;
-      } else {
-          thisFontSize = (thisPathStyle != Config.PATHSTYLE.INVISIBLE && thisMarkerConfig.labelString.length < 6) 
+        } else {
+            thisFontSize = (thisPathStyle !== Config.PATHSTYLE.INVISIBLE && thisMarkerConfig.labelString.length < 6) 
 		? Config.LABELFONT.medium : Config.LABELFONT.small;
-      }
+        }
 
-      var markerOptions = {
-          position : new google.maps.LatLng(thisLatLngArray[0], thisLatLngArray[1]),
-          icon : colorIcon(thisIcon, thisPathStyle.foregroundColor),
-          strokeOpacity : thisPathStyle.markerStrokeOpacity || Config.OPACITY["MARKERSTROKE"],
-          labelContent : thisMarkerConfig.labelString,
-          labelPosition : thisMarkerConfig.labelPosition,
-          labelStyle : { 
-              color : thisPathStyle.labelColor,
-              fontSize : thisFontSize,
-              opacity : Config.OPACITY["LABEL"]
-          },
-          mouseoverText : thisMarkerConfig.mouseoverText,
-          infowindowText : thisMarkerConfig.labelDetails
-        };
+        var markerOptions = {
+            position : new google.maps.LatLng(thisLatLngArray[0], thisLatLngArray[1]),
+            icon : colorIcon(thisIcon, thisPathStyle.foregroundColor),
+            strokeOpacity : thisPathStyle.markerStrokeOpacity || Config.OPACITY["MARKERSTROKE"],
+            labelContent : thisMarkerConfig.labelString,
+            labelPosition : thisMarkerConfig.labelPosition,
+            labelStyle : { 
+                color : thisPathStyle.labelColor,
+                fontSize : thisFontSize,
+                opacity : Config.OPACITY["LABEL"]
+            },
+            mouseoverText : thisMarkerConfig.mouseoverText,
+            infowindowText : thisMarkerConfig.labelDetails
+          };
 
-      var marker = getLabeledMarker(markerOptions, map);
+        var marker = getLabeledMarker(markerOptions, map);
 
-      if (thisMarkerConfig.size == MARKER_LARGE) {
-          allLargeMarkers.push(marker);
-      }
-      else {
-          allSmallMarkers.push(marker);
-      }
+        if (thisMarkerConfig.size === MARKER_LARGE) {
+            allLargeMarkers.push(marker);
+        } else {
+            allSmallMarkers.push(marker);
+        }
 
-      // Large markers get a shadow set that is shown at lower-resolution zooms.
+        // Large markers get a shadow set that is shown at lower-resolution zooms.
 
-      if (thisMarkerConfig.size == MARKER_LARGE) {
+        if (thisMarkerConfig.size === MARKER_LARGE) {
 
-          var thisMajorLabel = thisMarkerConfig.majorLabel || '';
-          var thisMajorIcon = (thisMajorLabel != '') ? colorIcon(Config.ICON["DIAMOND"].medium, Colors.DARK_GREY)  : 
+            var thisMajorLabel = thisMarkerConfig.majorLabel || '';
+            var thisMajorIcon = (thisMajorLabel !== '') ? colorIcon(Config.ICON["DIAMOND"].medium, Colors.DARK_GREY)  : 
                   colorIcon(Config.ICON["DIAMOND"].small, thisPathStyle.foregroundColor);
-          var thisMajorMarkerOptions = {
-              position : new google.maps.LatLng(thisLatLngArray[0], thisLatLngArray[1]),
-              icon : thisMajorIcon,
-              strokeOpacity : thisPathStyle.markerStrokeOpacity || Config.OPACITY["MARKERSTROKE"],
-              labelContent : thisMajorLabel,
-              labelPosition : thisMarkerConfig.labelPosition,
-              labelStyle : { 
-                  color : Colors.DARK_RED,
-                  fontSize : Config.LABELFONT.medium,
-                  opacity : Config.OPACITY["LABEL"]
-              },
-              mouseoverText : thisMarkerConfig.mouseoverText,
-              infowindowText : thisMarkerConfig.labelDetails
-            };
+            var thisMajorMarkerOptions = {
+                position : new google.maps.LatLng(thisLatLngArray[0], thisLatLngArray[1]),
+                icon : thisMajorIcon,
+                strokeOpacity : thisPathStyle.markerStrokeOpacity || Config.OPACITY["MARKERSTROKE"],
+                labelContent : thisMajorLabel,
+                labelPosition : thisMarkerConfig.labelPosition,
+                labelStyle : { 
+                    color : Colors.DARK_RED,
+                    fontSize : Config.LABELFONT.medium,
+                    opacity : Config.OPACITY["LABEL"]
+                },
+                mouseoverText : thisMarkerConfig.mouseoverText,
+                infowindowText : thisMarkerConfig.labelDetails
+              };
 
-          majorMarkers.push(getLabeledMarker(thisMajorMarkerOptions, map));
-      }
+            majorMarkers.push(getLabeledMarker(thisMajorMarkerOptions, map));
+        }
 
-  }
+    }
 
-  return {
-      majorMarkers : majorMarkers,
-      allLargeMarkers : allLargeMarkers,
-      allSmallMarkers : allSmallMarkers
-    };
+    return {
+        majorMarkers : majorMarkers,
+        allLargeMarkers : allLargeMarkers,
+        allSmallMarkers : allSmallMarkers
+      };
 
 }
 
 
 function getBathroomMarkerConfigs() {
-  // Paste configuration data inside the returned array.
-  return [
+    // Paste configuration data inside the returned array.
+    return [
         { latLngString: '40.714002, -73.933852', labelDetails: 'BP Gas Station / Convenience Store (Metropolitan Ave just past Morgan Ave)', mouseoverText: 'Gas' }, 
         { latLngString: '40.698639, -73.903945', labelDetails: 'Shell Gas Station (Cypress Ave at Weirfield St)', mouseoverText: 'Gas' }, 
         { latLngString: '40.687482, -73.890085', labelDetails: 'Highland Park Restroom (may be closed) (Just north of parking lot)', mouseoverText: 'Public' }, 
@@ -812,7 +762,7 @@ function getBathroomMarkerConfigs() {
         { latLngString: '40.809388, -72.641548', labelDetails: 'Westhampton Public Library (Main St at Library Ave)', mouseoverText: 'Public' }, 
         { latLngString: '40.903871, -72.605005', labelDetails: 'USA Gas (Flanders Rd)', mouseoverText: 'Gas' }, 
         { latLngString: '40.909583, -72.633729', labelDetails: '7-Eleven (Flanders Rd)', mouseoverText: 'Fast Food' }, 
-    ];
+      ];
 }
 
 function createBathroomMarkerArrays(markerConfigs, map) {
@@ -857,40 +807,37 @@ function showOrHideElements(currentZoom) {
     var markerArrays = activeState.markerArrays;
 
     // iterate over markers and call setVisible
-    for (i = 0; i < markerArrays.allSmallMarkers.length; i++) { 
+    for (var i = 0; i < markerArrays.allSmallMarkers.length; i++) { 
         markerArrays.allSmallMarkers[i].setVisible(currentZoom >= Config.ZOOMDISPLAY["SMALLMARKERS"]-1);
         markerArrays.allSmallMarkers[i].set("labelVisible", currentZoom >= Config.ZOOMDISPLAY["SMALLMARKERS"]);
     }
 
-    for (i = 0; i < markerArrays.allLargeMarkers.length; i++) {
+    for (var i = 0; i < markerArrays.allLargeMarkers.length; i++) {
         markerArrays.allLargeMarkers[i].setVisible(currentZoom >= Config.ZOOMDISPLAY["NONMAJORMARKERS"]);
     }
 
-    for (i = 0; i < markerArrays.majorMarkers.length; i++) {
+    for (var i = 0; i < markerArrays.majorMarkers.length; i++) {
         if (currentZoom < Config.ZOOMDISPLAY["NONMAJORMARKERS"]-3) {
             var thisLabelContent = markerArrays.majorMarkers[i].get("labelContent");
-            if (thisLabelContent == '') {
+            if (thisLabelContent === '') {
                 markerArrays.majorMarkers[i].setVisible(false);
-            }
-            else {
+            } else {
                 markerArrays.majorMarkers[i].set("labelVisible", false);
             }
-        }
-        else if (currentZoom < Config.ZOOMDISPLAY["NONMAJORMARKERS"]) {
+        } else if (currentZoom < Config.ZOOMDISPLAY["NONMAJORMARKERS"]) {
             markerArrays.majorMarkers[i].setVisible(true);
             markerArrays.majorMarkers[i].set("labelVisible", true);
-        }
-        else {
+        } else {
             markerArrays.majorMarkers[i].setVisible(false);
         }
     }
 
-    for (i = 0; i < markerArrays.bathroomMarkers.length; i++) { 
+    for (var i = 0; i < markerArrays.bathroomMarkers.length; i++) { 
         markerArrays.bathroomMarkers[i].setVisible(activeState.showBathrooms && currentZoom >= Config.ZOOMDISPLAY["SPECIALMARKERS"]-1);
         markerArrays.bathroomMarkers[i].set("labelVisible", activeState.showBathrooms && currentZoom >= Config.ZOOMDISPLAY["SPECIALMARKERS"]);
     }
 
-    for (i = 0; i < activeState.vanRoutes.length; i++) {
+    for (var i = 0; i < activeState.vanRoutes.length; i++) {
         activeState.vanRoutes[i].setVisible(activeState.showVanRoutes && currentZoom >= Config.ZOOMDISPLAY["SPECIALMARKERS"]-1);
     }
 
@@ -898,29 +845,29 @@ function showOrHideElements(currentZoom) {
 
 
 function createLabelLayer(map) {
-  // The following variables are temporary just to know what we're talking about.
+    // The following variables are temporary just to know what we're talking about.
 
-  var markerConfigs = getMarkerConfigs();
+    var markerConfigs = getMarkerConfigs();
 
-  var markerArrays = createThreeMarkerArrays(markerConfigs, map); // returns an object with three elements, each an array of markers
+    var markerArrays = createThreeMarkerArrays(markerConfigs, map); // returns an object with three elements, each an array of markers
 
-  markerArrays.bathroomMarkers = createBathroomMarkerArrays(getBathroomMarkerConfigs(), map); // adds an array of bathroom markers
+    markerArrays.bathroomMarkers = createBathroomMarkerArrays(getBathroomMarkerConfigs(), map); // adds an array of bathroom markers
 
-  activeState.markerArrays = markerArrays;
+    activeState.markerArrays = markerArrays;
 
-  google.maps.event.addListener(map, 'zoom_changed', function() {
-	showOrHideElements(map.getZoom());
-   });
+    google.maps.event.addListener(map, 'zoom_changed', 
+      function() {
+	  showOrHideElements(map.getZoom());
+      });
 
-  showOrHideElements(map.getZoom());
-
+    showOrHideElements(map.getZoom());
 }
 
 
 function getSegmentConfigs() {
-  // Paste segment configurations into the return [ ] array
+    // Paste segment configurations into the return [ ] array
 
-  return [
+    return [
         {
           title: 'McCarren Park Brooklyn to Highland Park/Ridgeway Reservoir', 
           segmentType: 'ROAD_OPEN', 
@@ -1014,14 +961,14 @@ function getSegmentConfigs() {
           segmentType: 'ROAD_OPEN', 
           pointsAsKMLStrings: '-72.504227,40.849140,0.0 -72.505060,40.850660,0.0 -72.505650,40.851150,0.0 -72.505730,40.851390,0.0 -72.505250,40.853730,0.0 -72.505010,40.854340,0.0 -72.504820,40.854670,0.0 -72.505140,40.856450,0.0 -72.508240,40.856490,0.0 -72.511475,40.857285,0.0 -72.513960,40.857710,0.0 -72.513830,40.862690,0.0 -72.520190,40.863530,0.0 -72.523260,40.863820,0.0 -72.526080,40.864110,0.0 -72.528030,40.864490,0.0 -72.535990,40.865480,0.0 -72.539180,40.869040,0.0 -72.540200,40.869790,0.0 -72.540380,40.870090,0.0 -72.540440,40.870710,0.0 -72.540750,40.871280,0.0 -72.541292,40.871720,0.0 -72.541485,40.872030,0.0 -72.542408,40.873931,0.0 -72.542945,40.875257,0.0 -72.543191,40.875430,0.0 -72.544830,40.875510,0.0 -72.546025,40.875380,0.0 -72.547950,40.875000,0.0 -72.548800,40.874990,0.0 -72.549300,40.875110,0.0 -72.549680,40.875260,0.0 -72.550230,40.875700,0.0 -72.550730,40.876640,0.0 -72.551050,40.877180,0.0 -72.552910,40.878460,0.0 -72.553360,40.878920,0.0 -72.553507,40.879204,0.0 -72.554183,40.882177,0.0 -72.554720,40.884640,0.0 -72.555460,40.887990,0.0 -72.558830,40.888740,0.0 -72.560400,40.889300,0.0 -72.561290,40.889670,0.0 -72.566400,40.892050,0.0 -72.568184,40.892664,0.0 -72.570297,40.893030,0.0 -72.575297,40.893840,0.0 -72.578629,40.894380,0.0 -72.581480,40.894970,0.0 -72.582464,40.895191,0.0 -72.583570,40.895570,0.0 -72.586220,40.896975,0.0 -72.590830,40.899620,0.0 -72.591369,40.899850,0.0 -72.592356,40.900121,0.0 -72.593480,40.900240,0.0 -72.596150,40.900030,0.0 -72.597850,40.900090,0.0 -72.599430,40.900440,0.0 -72.600850,40.901040,0.0 -72.601850,40.901650,0.0 -72.603110,40.902800,0.0 -72.603740,40.903260,0.0 -72.604670,40.903650,0.0 -72.605570,40.903795,0.0 -72.608745,40.904220,0.0 -72.609550,40.904330,0.0 -72.610540,40.904370,0.0 -72.611380,40.904310,0.0 -72.612320,40.904120,0.0 -72.614600,40.903330,0.0 -72.615470,40.903180,0.0 -72.616695,40.903145,0.0 -72.618380,40.903260,0.0 -72.619680,40.903520,0.0 -72.620930,40.904190,0.0 -72.621340,40.904575,0.0 -72.621620,40.905011,0.0 -72.622150,40.906270,0.0 -72.622550,40.906980,0.0 -72.623060,40.907720,0.0 -72.623470,40.908180,0.0 -72.624090,40.908650,0.0 -72.624930,40.909020,0.0 -72.628540,40.910020,0.0 -72.629570,40.910190,0.0 -72.630640,40.910200,0.0 -72.632506,40.909884,0.0 -72.634590,40.909590,0.0 -72.635392,40.909513,0.0 -72.637042,40.909536,0.0 -72.637790,40.909650,0.0 -72.640266,40.910250,0.0 -72.642490,40.910840,0.0 -72.645417,40.911665,0.0 -72.652810,40.913890,0.0 -72.653560,40.914090,0.0 -72.657830,40.914270,0.0 -72.660507,40.914480,0.0 -72.662420,40.914670,0.0 -72.662660,40.914790,0.0 -72.662790,40.915070,0.0 -72.662610,40.916000,0.0 -72.662530,40.916960,0.0 -72.663420,40.916930,0.0 -72.663918,40.917070,0.0 -72.664740,40.917180,0.0 -72.666310,40.917310,0.0 -72.667760,40.917770,0.0 -72.669040,40.918090,0.0 -72.670050,40.918240,0.0 -72.670850,40.918220,0.0 -72.671720,40.919430,0.0 -72.672690,40.920540,0.0 -72.673170,40.920330,0.0'.split(' ') 
         }
-    ];
+      ];
 }
 
 
 function getVanRouteConfigs() {
-  // Paste segment configurations into the return [ ] array
+    // Paste segment configurations into the return [ ] array
 
-  return [
+    return [
         {
           title: 'Going around the Scott Street segment', 
           segmentType: 'VAN', 
@@ -1043,7 +990,7 @@ function getVanRouteConfigs() {
           segmentType: 'VAN', 
           pointsAsKMLStrings: '-73.169900,40.746260,0.0 -73.168620,40.746570,0.0 -73.168220,40.746800,0.0 -73.167980,40.747050,0.0 -73.167570,40.747310,0.0 -73.166780,40.747510,0.0 -73.164760,40.747850,0.0 -73.162460,40.748300,0.0 -73.160510,40.748620,0.0 -73.158310,40.748600,0.0 -73.155050,40.748080,0.0 -73.152360,40.747780,0.0 -73.149930,40.747770,0.0 -73.146280,40.748190,0.0 -73.141320,40.748430,0.0 -73.137030,40.748930,0.0 -73.133690,40.749400,0.0 -73.132250,40.749610,0.0 -73.127420,40.751040,0.0 -73.126300,40.751340,0.0 -73.124950,40.751530,0.0 -73.123920,40.752960,0.0 -73.125540,40.752770,0.0 -73.126480,40.752430,0.0 -73.128200,40.751620,0.0 -73.129730,40.751030,0.0 -73.131570,40.750390,0.0 -73.132670,40.750090,0.0 -73.134310,40.749680,0.0 -73.135380,40.749500,0.0 -73.135584,40.749586,0.0 -73.135509,40.749882,0.0 -73.135214,40.750354,0.0'.split(' ') 
         }
-    ];
+      ];
 }
 
 function createSegmentArray(map, segmentConfigs) {
@@ -1065,13 +1012,13 @@ function createSegmentArray(map, segmentConfigs) {
 }
 
 function createSegmentLayer(map) {
-
     var segmentConfigs = getSegmentConfigs();
 
     createSegmentArray(map, segmentConfigs);
 
     activeState.vanRoutes = createSegmentArray(map, getVanRouteConfigs());  // again, less than perfect design, must fix
 }
+
 
 function createSliderButtonHtml(onclickFunctionName, currentState) {
     var htmlOutput = '<!-- Rounded switch -->';
@@ -1083,6 +1030,12 @@ function createSliderButtonHtml(onclickFunctionName, currentState) {
     return htmlOutput;
 }
 
+function makeSVG(width, height, object) {
+    var svgText = '<svg width="' + width + '" height="' + height + '" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg"><g>';
+    svgText += object + '</g></svg>';
+    return svgText;
+}
+
 function createButtonTable() {
     function addRow(label, onclickFunctionName, currentState, optionalIcon) { // Utility
         var rowHtml = '<tr><td><b>' + label + '</b></td>';
@@ -1092,26 +1045,27 @@ function createButtonTable() {
     }
 
     var htmlOutput = '';
+    var thisIcon = '';
     if (InitialSettings.allowGeolocate || InitialSettings.allowBathrooms || InitialSettings.allowVanRoutes) { // only create table when there's at least one control needed
         htmlOutput += '<!-- Settings table -->';
         htmlOutput += '<table>';
         if (InitialSettings.allowGeolocate) {
-            var circleSVG = '<circle cx="20" cy="10" r="8" stroke="#000080" stroke-width="2" fill="#0060F0" />';
-            var thisIcon = '<div>' + makeSVG(40, 20, circleSVG) + '</div>';
+            var circleSVG = '<circle cx="20" cy="10" r="8" stroke="' + Colors.MEDIUM_BLUE + '" stroke-width="2" fill="' + Colors.GREENISH_BLUE + '" />';
+            thisIcon = '<div>' + makeSVG(40, 20, circleSVG) + '</div>';
             htmlOutput += addRow('Show Location', 'handleGeolocate', activeState.showGeolocate, thisIcon);
         }
         if (InitialSettings.allowBathrooms) {
             var wedgeSVG = '';
-            wedgeSVG += '<line x1="15" y1="20" x2="20" y2="5" stroke="#800080" stroke-width="2" fill="none" />';
-            wedgeSVG += '<line x1="20" y1="5" x2="25" y2="20" stroke="#800080" stroke-width="2" fill="none" />';
-            wedgeSVG += '<line x1="25" y1="20" x2="20" y2="15" stroke="#800080" stroke-width="2" fill="none" />';
-            wedgeSVG += '<line x1="20" y1="15" x2="15" y2="20" stroke="#800080" stroke-width="2" fill="none" />';
-            var thisIcon = '<div>' + makeSVG(40, 20, wedgeSVG)  + '</div>';
+            wedgeSVG += '<line x1="15" y1="20" x2="20" y2="5" stroke="' + Colors.MEDIUM_PURPLE + '" stroke-width="2" fill="none" />';
+            wedgeSVG += '<line x1="20" y1="5" x2="25" y2="20" stroke="' + Colors.MEDIUM_PURPLE + '" stroke-width="2" fill="none" />';
+            wedgeSVG += '<line x1="25" y1="20" x2="20" y2="15" stroke="' + Colors.MEDIUM_PURPLE + '" stroke-width="2" fill="none" />';
+            wedgeSVG += '<line x1="20" y1="15" x2="15" y2="20" stroke="' + Colors.MEDIUM_PURPLE + '" stroke-width="2" fill="none" />';
+            thisIcon = '<div>' + makeSVG(40, 20, wedgeSVG)  + '</div>';
             htmlOutput += addRow('Show Bathrooms', 'handleBathrooms', activeState.showBathrooms, thisIcon);
         }
         if (InitialSettings.allowVanRoutes) {
             var hatchedSVG = createHatchedGraySVG(10, 10);
-            var thisIcon = '<div>' + makeSVG(40, 20, hatchedSVG)  + '</div>';
+            thisIcon = '<div>' + makeSVG(40, 20, hatchedSVG)  + '</div>';
             htmlOutput += addRow('Show Van Routes', 'handleVanRoutes', activeState.showVanRoutes, thisIcon);
         }
         htmlOutput += '</table>';
@@ -1121,16 +1075,10 @@ function createButtonTable() {
 }
 
 
-function makeSVG(width, height, object) {
-    var svgText = '<svg width="' + width + '" height="' + height + '" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg"><g>';
-    svgText += object + '</g></svg>';
-    return svgText;
-}
-
 function createHatchedGraySVG(repetitions, yvalue) {
     var resultSVG = '';
-    for (var i=1; i< repetitions; i++) {
-        resultSVG += '<line x1="' + (i*5-2) + '" y1="' + (yvalue+4) + '" x2="' + (i*5+2) + '" y2="' + yvalue + '" stroke-width="2" stroke="#808080" fill="none" />';
+    for (var i=0; i< repetitions; i++) {
+        resultSVG += '<line x1="' + (i*5-2) + '" y1="' + (yvalue+4) + '" x2="' + (i*5+2) + '" y2="' + yvalue + '" stroke-width="2" stroke="' + Colors.MODERATE_GREY + '" fill="none" />';
     }
     return resultSVG;
 }
@@ -1146,46 +1094,46 @@ function createLegend(map) {
     }
 
     appendToLegend(legend, '<span style="color:blue;"><b>Road</b> (open access)</span>');
-    var solidLineSegment = '<line x1="0" y1="4" x2="25" y2="2" stroke-width="2.5" stroke="#0000CD" fill="none" id="svg_1_1"/>';
-    solidLineSegment += '<line x1="25" y1="2" x2="60" y2="3" stroke-width="2.5" stroke="#0000CD" fill="none" id="svg_1_2"/>';
-    solidLineSegment += '<line x1="60" y1="3" x2="150" y2="6" stroke-width="2.5" stroke="#0000CD" fill="none" id="svg_1_2"/>';
+    var solidLineSegment = '<line x1="0" y1="4" x2="25" y2="2" stroke-width="2.5" stroke="' + Colors.MEDIUM_BLUE + '" fill="none" id="svg_1_1"/>';
+    solidLineSegment += '<line x1="25" y1="2" x2="60" y2="3" stroke-width="2.5" stroke="' + Colors.MEDIUM_BLUE + '" fill="none" id="svg_1_2"/>';
+    solidLineSegment += '<line x1="60" y1="3" x2="150" y2="6" stroke-width="2.5" stroke="' + Colors.MEDIUM_BLUE + '" fill="none" id="svg_1_3"/>';
     appendToLegend(legend, makeSVG(100, 8, solidLineSegment));
 
     appendToLegend(legend, '<span style="color:blue;"><b>Bridge</b> (no van access)</span>');
     var dashedLineSegment = '';
     for (var i=0; i< 8; i++) {
-        dashedLineSegment += '<line x1="' + (i*20) + '" y1="' + (1+i/2) + '" x2="' + (i*20+15) + '" y2="' + (1.5+i/2) + '" stroke-width="3" stroke="#0000CD" fill="none" id="svg_3_' + i + '"/>';
+        dashedLineSegment += '<line x1="' + (i*20) + '" y1="' + (1+i/2) + '" x2="' + (i*20+15) + '" y2="' + (1.5+i/2) + '" stroke-width="3" stroke="' + Colors.MEDIUM_BLUE + '" fill="none" id="svg_2_' + i + '"/>';
     }
     appendToLegend(legend, makeSVG(100, 8, dashedLineSegment));
 
-    appendToLegend(legend, '<span style="color:#006400;"><b>Trail</b> (no van access)</span>');
-    var dottedLineSegment = '<line x1="0" y1="1" x2="150" y2="1" stroke-width="5" stroke="#D0F7C7" fill="none" id="svg_3_0"/>';
-    for (var i=1; i< 25; i++) {
-        dottedLineSegment += '<line x1="' + (i*6) + '" y1="1" x2="' + (i*6+3) + '" y2="1" stroke-width="3" stroke="#008000" fill="none" id="svg_3_' + i + '"/>';
+    appendToLegend(legend, '<span style="color:' + Colors.DARK_GREEN + ';"><b>Trail</b> (no van access)</span>');
+    var dottedLineSegment = '<line x1="0" y1="1" x2="150" y2="1" stroke-width="5" stroke="' + Colors.FAINT_GREEN + '" fill="none" id="svg_3_0"/>';
+    for (var i=0; i< 25; i++) {
+        dottedLineSegment += '<line x1="' + (i*6) + '" y1="1" x2="' + (i*6+3) + '" y2="1" stroke-width="3" stroke="' + Colors.DARK_GREEN + '" fill="none" id="svg_3_' + i + '"/>';
     }
     appendToLegend(legend, makeSVG(100, 8, dottedLineSegment));
 
-    appendToLegend(legend, '<span style="color:#404040;"><b>Van Route</b></span>');
+    appendToLegend(legend, '<span style="color:' + Colors.DARK_GREY + ';"><b>Van Route</b></span>');
     var hatchedLineSegment = createHatchedGraySVG(30, 1);
     appendToLegend(legend, makeSVG(100, 8, hatchedLineSegment));
 
     appendToLegend(legend, '<span style="color:black;"><b>Access Point</b></span>');
 
-    var twoDiamonds = '<rect height="5" width="5" x="2" y="5" transform="rotate(45 4.5 7.5)" stroke-width="2" stroke="#0000CD" fill="#FFFFFF" id="svg_3_1"/>';
-    twoDiamonds += '<text xml:space="preserve" x="10" y="12" text-anchor="left" stroke-width="0" stroke="#000000" fill="#0000CD" font-size="12" font-weight="bold" font-family="sans-serif" id="svg_3_2">16.9</text>';
-    twoDiamonds += '<rect height="5" width="5" x="45" y="5" transform="rotate(45 47.5 7.5)" stroke-width="2" stroke="#006400" fill="#FFFFFF" id="svg_3_3"/>';
-    twoDiamonds += '<text xml:space="preserve" x="53" y="12" text-anchor="left" stroke-width="0" stroke="#000000" fill="#006400" font-size="12" font-weight="bold" font-family="sans-serif" id="svg_3_2">45.2</text>';
+    var twoDiamonds = '<rect height="5" width="5" x="2" y="5" transform="rotate(45 4.5 7.5)" stroke-width="2" stroke="' + Colors.MEDIUM_BLUE + '" fill="#FFFFFF" id="svg_3_1"/>';
+    twoDiamonds += '<text xml:space="preserve" x="10" y="12" text-anchor="left" stroke-width="0" stroke="#000000" fill="' + Colors.MEDIUM_BLUE + '" font-size="12" font-weight="bold" font-family="sans-serif" id="svg_3_2">16.9</text>';
+    twoDiamonds += '<rect height="5" width="5" x="45" y="5" transform="rotate(45 47.5 7.5)" stroke-width="2" stroke="' + Colors.DARK_GREEN + '" fill="#FFFFFF" id="svg_3_3"/>';
+    twoDiamonds += '<text xml:space="preserve" x="53" y="12" text-anchor="left" stroke-width="0" stroke="#000000" fill="' + Colors.DARK_GREEN + '" font-size="12" font-weight="bold" font-family="sans-serif" id="svg_3_2">45.2</text>';
     appendToLegend(legend, makeSVG(80, 16, twoDiamonds));
 
     appendToLegend(legend, '<span style="color:black;"><b>Turn Point</b></span>');
 
-    var twoCircles = '<circle r="2" cx="4" cy="5" stroke-width="0" stroke="#000000" fill="#0000CD" id="svg_4_1"/>';
-    twoCircles += '<text xml:space="preserve" x="10" y="9" text-anchor="left" stroke-width="0" stroke="#000000" fill="#0000CD" font-size="10" font-weight="bold" font-family="sans-serif" id="svg_3_2">47.5</text>';
-    twoCircles += '<circle r="2" cx="47" cy="5" stroke-width="0" stroke="#000000" fill="#006400" id="svg_4_3"/>';
-    twoCircles += '<text xml:space="preserve" x="53" y="9" text-anchor="left" stroke-width="0" stroke="#000000" fill="#006400" font-size="10" font-weight="bold" font-family="sans-serif" id="svg_3_4">16.8</text>';
+    var twoCircles = '<circle r="2" cx="4" cy="5" stroke-width="0" stroke="#000000" fill="' + Colors.MEDIUM_BLUE + '" id="svg_4_1"/>';
+    twoCircles += '<text xml:space="preserve" x="10" y="9" text-anchor="left" stroke-width="0" stroke="#000000" fill="' + Colors.MEDIUM_BLUE + '" font-size="10" font-weight="bold" font-family="sans-serif" id="svg_3_2">47.5</text>';
+    twoCircles += '<circle r="2" cx="47" cy="5" stroke-width="0" stroke="#000000" fill="' + Colors.DARK_GREEN + '" id="svg_4_3"/>';
+    twoCircles += '<text xml:space="preserve" x="53" y="9" text-anchor="left" stroke-width="0" stroke="#000000" fill="' + Colors.DARK_GREEN + '" font-size="10" font-weight="bold" font-family="sans-serif" id="svg_3_4">16.8</text>';
     appendToLegend(legend, makeSVG(80, 13, twoCircles));
 
-    appendToLegend(legend, '<span style="color:#606060;">Details? Click on map</span>');
+    appendToLegend(legend, '<span style="color:' + Colors.MODERATE_GREY + ';">Details? Click on map</span>');
 
     map.controls[google.maps.ControlPosition.RIGHT_BOTTOM].push(legend);
 
@@ -1197,16 +1145,11 @@ function createLegend(map) {
     popupLegend += '<div><span style="color:blue;"><b>Bridge</b> (no access from van)</span></div>';
     popupLegend += '<div>' + makeSVG(150, 8, dashedLineSegment) + '</div>';
 
-    popupLegend += '<div><span style="color:#006400;"><b>Trail</b> (limited access)</span></div>';
+    popupLegend += '<div><span style="color:' + Colors.DARK_GREEN + ';"><b>Trail</b> (limited access)</span></div>';
     popupLegend += '<div>' + makeSVG(150, 8, dottedLineSegment) + '</div>';
 
-    popupLegend += '<div><span style="color:#404040;"><b>Van Route</b> (between segments)</span></div>';
+    popupLegend += '<div><span style="color:' + Colors.DARK_GREY + ';"><b>Van Route</b> (between segments)</span></div>';
     popupLegend += '<div>' + makeSVG(150, 8, hatchedLineSegment) + '</div>';
-
-/* // Suppress 'difficult' from legend
-    popupLegend += '<div><span style="color:#800000;"><b>Difficult</b> (tricky segment, be careful)</span></div>';
-    popupLegend += '<div>' + makeSVG(150, 8, solidLineSegment2) + '</div>';
-*/
 
     // To save vertical space, put access points next to each other in a table
 
@@ -1256,6 +1199,7 @@ function createLegend(map) {
 
 }
 
+
 function handleGeolocate(checkbox) {
     activeState.showGeolocate = checkbox.checked;
 
@@ -1285,6 +1229,7 @@ function handleGeolocate(checkbox) {
 
 }
 
+
 function handleBathrooms(checkbox) {
     activeState.showBathrooms = checkbox.checked;
 
@@ -1299,6 +1244,7 @@ function handleBathrooms(checkbox) {
     showOrHideElements(activeState.map.getZoom());
 
 }
+
 
 function handleVanRoutes(checkbox) {
     activeState.showVanRoutes = checkbox.checked;
@@ -1316,57 +1262,91 @@ function handleVanRoutes(checkbox) {
 
 
 function showCurrentGeoLocation(map) {
-  var geolocationMarker = null;  // remains null if unable to turn on the marker
+    var geolocationMarker = null;  // remains null if unable to turn on the marker
 
-  function handleLocationError(browserHasGeolocation, pos) { // Utility
-      var errorWindow = new google.maps.InfoWindow({map: map});
-      errorWindow.setPosition(pos);
-      errorWindow.setContent(browserHasGeolocation ?
+    function handleLocationError(browserHasGeolocation, pos) { // Utility
+        var errorWindow = new google.maps.InfoWindow({map: map});
+        errorWindow.setPosition(pos);
+        errorWindow.setContent(browserHasGeolocation ?
                           'Error: The Geolocation service failed.' :
                           'Error: Your browser doesn\'t support geolocation.');
-  }
+    }
 
-  // Try HTML5 geolocation.
-  if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(function(position) {
-          var pos = {
-              lat: position.coords.latitude,
-              lng: position.coords.longitude
-          };
+    // Try HTML5 geolocation.
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(function(position) {
+            var pos = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude
+              };
 
-          map.setCenter(pos);
-      }, function() {
-          handleLocationError(true, map.getCenter());
-      });
-
-      geolocationMarker = new GeolocationMarker();
-      geolocationMarker.setCircleOptions({fillColor: '#C0C0C0'});
-
-/*
-      google.maps.event.addListenerOnce(geolocationMarker, 'position_changed', function() {
-          map.setCenter(this.getPosition());
-          map.fitBounds(this.getBounds());
-        });
-*/
-
-      google.maps.event.addListener(geolocationMarker, 'geolocation_error', function(e) {
-          alert('There was an error obtaining your position. Message: ' + e.message);
+            map.setCenter(pos);
+        }, function() {
+            handleLocationError(true, map.getCenter());
         });
 
-      geolocationMarker.setMap(map);
+        geolocationMarker = new GeolocationMarker();
+        geolocationMarker.setCircleOptions({fillColor: Colors.FAINT_GREY });
 
-  } else {
-      // Browser doesn't support Geolocation
-      handleLocationError(false, map.getCenter());
-  }
+        google.maps.event.addListener(geolocationMarker, 'geolocation_error', function(e) {
+            alert('There was an error obtaining your position. Message: ' + e.message);
+          });
 
-  return geolocationMarker;
+        geolocationMarker.setMap(map);
 
+    } else {
+        // Browser doesn't support Geolocation
+        handleLocationError(false, map.getCenter());
+    }
+
+    return geolocationMarker;
 }
 
 
 
-  google.maps.event.addDomListener(window, 'load', initialize);
+function readURLParams(startOptions) {
+
+    function isNumeric(n) {
+      return !isNaN(parseFloat(n)) && isFinite(n);
+    }
+
+    if (location.search.substring(1).length > 0) {
+        var parameters = location.search.substring(1).split("&");
+        if (parameters.length > 0) {
+            var latLngZoomLiteral = parameters[0].split(',');
+            if ((latLngZoomLiteral.length >= 2)
+                    && isNumeric(latLngZoomLiteral[0]) && isNumeric(latLngZoomLiteral[1])) {
+                startOptions.startLatitude =  latLngZoomLiteral[0];
+                startOptions.startLongitude = latLngZoomLiteral[1];
+                if ((latLngZoomLiteral.length >= 3) && isNumeric(latLngZoomLiteral[2])) {
+                    startOptions.zoomLevel = Number(latLngZoomLiteral[2]);
+                }
+            }
+        }
+    }
+}
+
+
+function initialize() {
+    var startOptions = {
+        zoomLevel : 10,
+        startLatitude : InitialSettings.startLatitude,
+        startLongitude : InitialSettings.startLongitude
+      };
+
+    readURLParams(startOptions);
+
+    var map = createMapObject(startOptions);
+
+    createSegmentLayer(map);
+
+    createLabelLayer(map);
+
+    createLegend(map);
+}
+
+
+google.maps.event.addDomListener(window, 'load', initialize);
 
     </script>
   </head>
