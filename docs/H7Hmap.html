@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html>
+  <head>
+  <title>Customized Route Map</title>
+
+  <script>
+    var InitialSettings = { // Configure these items first when creating a new map
+        title: 'H7H Customized Map',   // Page title and also shows up in legend details
+        startLatitude : 40.72 + 0.25,         // Map initial center point, unless overridden
+        startLongitude : -73.95 + 0.45,   // Map initial center point, unless overridden
+        allowGeolocate : true,        // If true, allow user to activate Geolocation feature
+        allowBathrooms : false,       // If true, allow user to display bathrooms near the course. Requires programmer to actually implement bathroom points!
+        allowVanRoutes : false,        // If true, allow user to display alternate van routes. Requires programmer to actually implement van routes!
+        hasTurnByTurnDirections : true,   // true if the legend details should link to turn-by-turn directions, false otherwise
+        turnByTurnDirectionsUrl : 'https://docs.google.com/spreadsheets/d/1t3g7QU2NDF9gUkUL-MWEgIZh06COdC8MQ5fzs_M_xxM/edit#gid=0'
+    };
+
+    if (Object.freeze) {
+        Object.freeze(InitialSettings);
+    }
+
+    if (InitialSettings.title) {
+        document.title = InitialSettings.title;
+    }
+  </script>
+
+  <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+  <meta charset="utf-8">
+
+  <link href="./mapcanvas.css" rel="stylesheet">
+  <link href="./sliderbutton.css" rel="stylesheet">
+
+  <script src="https://maps.googleapis.com/maps/api/js?v=3.exp&key=AIzaSyD6s-RAR1ycQsIPdZihOI5JSfZaGSIgc0M"></script>
+
+  <script type="text/javascript" src="https://sbatten1969.github.io/gmaps/markerwithlabel.js"></script>
+
+  <script type="text/javascript" src="./createmap.js"></script>
+  <script type="text/javascript" src="./geolocation-marker.js"></script>
+
+
+<script>
+"use strict";
+
+// Colors constant is set here, before everything else, in case any of the initialization routines need well-defined colors.
+var Colors = {
+    BLACK : '#000000',
+    DARK_GREY : '#404040',
+    MODERATE_GREY : '#606060',
+    LIGHT_GREY : '#808080',  // Caution: works as a background or fill color only; does not work as foreground color
+    FAINT_GREY : '#C0C0C0',
+    WHITE : '#FFFFFF',
+    MEDIUM_BLUE : '#0000CD',
+    GREENISH_BLUE : '#0060F0',
+    DARK_RED : '#800000',
+    MEDIUM_RED : '#CC0000',
+    BRIGHT_RED : '#FF0000',
+    DARK_GREEN : '#006400',
+    BRIGHT_GREEN : '#00FF00',
+    FAINT_GREEN : '#D0F7C7',
+    MEDIUM_PURPLE : '#A000A0',
+    BRIGHT_PURPLE : '#FF00FF'
+  };
+
+
+if (Object.freeze) {
+  Object.freeze(Colors);
+}
+
+
+// Global configuration constants
+
+var _iconpath = { // short-lifecycle object to be used in creation of icons
+    CIRCLE : google.maps.SymbolPath.CIRCLE,
+    CLOSED_DIAMOND : 'M -3,0 0,3 3,0 0,-3 z', // roll my own diamond; must render with scale=1.5 or so, otherwise it's too big
+    BROKEN_DIAMOND : 'M -2,-1 -3,0 -2,1 M -1,2 0,3, 1,2 M 2,1 3,0, 2,-1 M 1,-2 0,-3, -1,-2',  // roll my own broken diamond, version 1 -- in testing, Broken Diamond wasn't effective because it got lost visually
+    BROKEN_DIAMOND_ALT : 'M -3,1 -1,3 M 1,3 3,1 M 3,-1 1,-3 M -1,-3 -3,-1',  // roll my own broken diamond, version 2
+    WEDGE_UP : google.maps.SymbolPath.FORWARD_CLOSED_ARROW
+};
+
+var _metaConfig = { // short-lifecycle object to be used in creation of config
+    STANDARD_OPACITY : 0.6,
+    STANDARD_SCALE : 3.0,   // 3: reasonably thick lines and icons without being overly large
+
+    createDiamond : function(scale, strokeweight) {
+        return {
+	      path: _iconpath.CLOSED_DIAMOND,
+              scale: scale,  // scale should be set to a little more than half of STANDARD_SCALE for large, half = medium, less than half = small
+	      strokeWeight: strokeweight,
+	      fillColor: Colors.WHITE,
+	      fillOpacity: 0.3, // mostly transparent
+	      strokeColor: Colors.BLACK  // can be reset via colorIcon() function below
+          };
+      },
+
+    createCircle : function(scale, strokeweight) {
+        return {
+	      path: _iconpath.CIRCLE,
+              scale: scale,  // for circle, scale must be larger than diamond -- STANDARD_SCALE for large, 67% of STANDARD_SCALE for medium.  Less than 40% of STANDARD_SCALE may be too small
+	      strokeWeight: strokeweight,
+	      fillColor: Colors.WHITE,
+	      fillOpacity: 0.3, // mostly transparent
+	      strokeColor: Colors.BLACK  // can be reset via colorIcon() function below
+          };
+      },
+
+    createWedgeUp : function(scale, strokeweight) {
+        return {
+	      path: _iconpath.WEDGE_UP,
+              scale: scale,  // for wedge, scale must be similar to circle
+	      strokeWeight: strokeweight,
+	      fillColor: Colors.WHITE,
+	      fillOpacity: 0.1, // almost completely transparent
+	      strokeColor: Colors.BLACK  // can be reset via colorIcon() function below
+          };
+      },
+
+    DASHSTYLE : {
+        createLoose : function(scale) {
+            var thisScale = scale || 1.0;
+            return {
+                path : 'M 0,0 0,2',  // Long dash
+                repeat : (thisScale*5.33) + 'px'    // for line scale=3, repeat of 15-20px is relatively loose spacing
+              };
+          },
+        createTight : function (scale) {
+            var thisScale = scale || 1.0;
+            return {
+                path : 'M 0,0 0,2',  // Long dash
+                repeat : (thisScale*4) + 'px'    // for line scale=3, repeat of 10-12px is relatively tight spacing
+              };
+          },
+        createDots : function (scale) {
+            var thisScale = scale || 1.0;
+            return {
+                path : 'M 0,0 0,0.25',  // Short stubs that end up looking like dots instead of dashes
+                repeat : (thisScale*2) + 'px'    // for line scale=3, repeat of 5-7px is relatively even spcing
+              };
+          },
+        createSlashes : function (scale) {
+            var thisScale = scale || 1.0;
+            return {
+                path : 'M -1,0 0,1',  // Diagonal hatching
+                repeat : (thisScale*2) + 'px'    // for line scale=3, repeat of 5-7px is relatively even spcing
+              };
+          }
+      }
+
+  };
+
+
+var Config = {
+    DEFAULT_LINESCALE : _metaConfig.STANDARD_SCALE,
+    ZOOMDISPLAY : {
+        "SPECIALMARKERS" : 14, // Prior to this zoom, there would be too many special markers, cluttering the view
+        "SMALLMARKERS" : 13, // Prior to this zoom, there would be too many small markers, cluttering the view
+        "NONMAJORMARKERS" : 11 // Prior to this zoom, there would be too many big markers, cluttering the view
+      },
+    PATHSTYLE : {
+        "ROAD_OPEN" : {
+            foregroundColor: Colors.MEDIUM_BLUE,
+            backgroundColor: Colors.WHITE,
+            foregroundOpacity: _metaConfig.STANDARD_OPACITY * 0.75, // more transparent
+            labelColor: Colors.MEDIUM_BLUE
+          },
+        "ROAD_DIFFICULT" : {
+            foregroundColor: Colors.MEDIUM_RED,
+            backgroundColor: Colors.BRIGHT_RED,
+            foregroundOpacity: _metaConfig.STANDARD_OPACITY * 0.75, // more transparent
+            labelColor: Colors.MEDIUM_BLUE   // [sic]
+          },
+        "ROAD_NOVANACCESS" : {
+            foregroundColor: Colors.MEDIUM_BLUE,
+            backgroundColor: Colors.WHITE,
+            foregroundOpacity: _metaConfig.STANDARD_OPACITY * 0.75, // more transparent
+            labelColor: Colors.MEDIUM_BLUE,
+            dashOptions : _metaConfig.DASHSTYLE.createTight(_metaConfig.STANDARD_SCALE)  // Potentially confusing to viewer?
+          },
+        "TRAIL_PAVED" : {
+            foregroundColor: Colors.DARK_GREEN,
+            backgroundColor: Colors.BRIGHT_GREEN,
+            foregroundOpacity: _metaConfig.STANDARD_OPACITY * 1.1, // slightly more opaque
+            labelColor: Colors.DARK_GREEN,
+            dashOptions : _metaConfig.DASHSTYLE.createDots(_metaConfig.STANDARD_SCALE)
+          },
+        "TRAIL_UNPAVED" : {
+            foregroundColor: Colors.DARK_GREEN,   // Same as TRAIL_PAVED
+            backgroundColor: Colors.BRIGHT_GREEN,
+            foregroundOpacity: _metaConfig.STANDARD_OPACITY * 1.1,
+            labelColor: Colors.DARK_GREEN,
+            dashOptions : _metaConfig.DASHSTYLE.createDots(_metaConfig.STANDARD_SCALE)
+          },
+        "TRAIL_DIFFICULT" : {
+            foregroundColor: Colors.MEDIUM_RED,   // Same as ROAD_DIFFICULT, except this line is dashed
+            backgroundColor: Colors.BRIGHT_RED,
+            foregroundOpacity: _metaConfig.STANDARD_OPACITY * 0.75,
+            labelColor: Colors.DARK_GREEN,   // [sic]
+            dashOptions : _metaConfig.DASHSTYLE.createTight(_metaConfig.STANDARD_SCALE)
+          },
+        "VAN" : {
+            foregroundColor: Colors.DARK_GREY,
+            backgroundColor: Colors.LIGHT_GREY,
+            foregroundOpacity: _metaConfig.STANDARD_OPACITY,
+            labelColor: Colors.DARK_GREY,
+            scale : _metaConfig.STANDARD_SCALE * 0.8, // thinner
+            dashOptions : _metaConfig.DASHSTYLE.createSlashes(_metaConfig.STANDARD_SCALE * 0.8)
+          },
+        "INVISIBLE" : {  // Not really a path style, more of a point style -- when we want to add a short label without a physical marker
+            foregroundColor: Colors.LIGHT_GREY,  // Colors do not matter; foreground opacity is set to 0 (transparent)
+            backgroundColor: Colors.WHITE,
+            foregroundOpacity: 0.0, // invisible line
+            labelColor: Colors.DARK_GREY,
+            markerStrokeOpacity: -1.0  // invisible physical marker
+          },
+        "RED_DASHES" : {
+            foregroundColor: Colors.MEDIUM_RED,
+            backgroundColor: Colors.LIGHT_RED,
+            foregroundOpacity: _metaConfig.STANDARD_OPACITY * 0.75, // more transparent
+            labelColor: Colors.MEDIUM_RED,
+            dashOptions : _metaConfig.DASHSTYLE.createTight(_metaConfig.STANDARD_SCALE)
+          },
+        "DEFAULT" : {  // Fallback option if color selection isn't clear
+            foregroundColor: Colors.DARK_GREY,
+            backgroundColor: Colors.WHITE,
+            foregroundOpacity: _metaConfig.STANDARD_OPACITY,
+            labelColor: Colors.BLACK
+          }
+      },
+    OPACITY : { 
+        "STANDARD" :    _metaConfig.STANDARD_OPACITY,
+        "LABEL" :       _metaConfig.STANDARD_OPACITY * 1.25,  // more opaque
+        "MARKERSTROKE": _metaConfig.STANDARD_OPACITY * 1.25,  // more opaque
+        "MARKERFILL" :  _metaConfig.STANDARD_OPACITY * 0.5,  // NOT USED
+        "BACKGROUND" :  0.15  // very transparent
+      },
+    LABELPOSITION : {
+        "ABOVE" : new google.maps.Point(17, 22),
+        "LEFT"  : new google.maps.Point(44, 8),
+        "BELOW" : new google.maps.Point(17, -5),
+        "RIGHT" : new google.maps.Point(-6, 8),
+        "DEEP_BELOW" : new google.maps.Point(19, -9),
+        "DEFAULT" : new google.maps.Point(-6, 8) // same as RIGHT
+      },
+    LABELFONT : {
+        large : '16px',
+        medium : '14px',
+        small : '11px'
+      },
+    ICON : {  // These are colored black and must be recolored as desired
+        "DIAMOND" : {
+            large  : _metaConfig.createDiamond(_metaConfig.STANDARD_SCALE * 0.583, _metaConfig.STANDARD_SCALE * 0.667),
+            medium : _metaConfig.createDiamond(_metaConfig.STANDARD_SCALE * 0.500, _metaConfig.STANDARD_SCALE * 0.500),
+            small  : _metaConfig.createDiamond(_metaConfig.STANDARD_SCALE * 0.417, _metaConfig.STANDARD_SCALE * 0.417)
+          },
+        "CIRCLE" : {
+            large  : _metaConfig.createCircle(_metaConfig.STANDARD_SCALE * 1.000, _metaConfig.STANDARD_SCALE * 0.667),  // thinner stroke weight makes it obviously visible as a circle
+            medium : _metaConfig.createCircle(_metaConfig.STANDARD_SCALE * 0.667, _metaConfig.STANDARD_SCALE * 1.000),  // thicker stroke weight makes it seem like a filled circle
+            small  : _metaConfig.createCircle(_metaConfig.STANDARD_SCALE * 0.667, _metaConfig.STANDARD_SCALE * 0.500)
+          },
+        "WEDGE_UP" : {
+            large  : _metaConfig.createWedgeUp(_metaConfig.STANDARD_SCALE * 1.000, _metaConfig.STANDARD_SCALE * 0.667),
+            medium : _metaConfig.createWedgeUp(_metaConfig.STANDARD_SCALE * 0.667, _metaConfig.STANDARD_SCALE * 1.000),
+            small  : _metaConfig.createWedgeUp(_metaConfig.STANDARD_SCALE * 0.500, _metaConfig.STANDARD_SCALE * 0.500)
+          }
+      },
+    INFOWINDOW_TIMEOUT : 4000   // Timeout for an informational window (after the mouse leaves it), in ms.  0=no timeout
+  };
+
+
+// Throw away short-lifecycle objects required to help create 'config'
+_metaConfig = null;
+_iconpath = null;
+
+if (Object.freeze) {
+  Object.freeze(Config);  // lock this all-constant object to prevent changes
+}
+
+
+var LabelPosition = {  // this is a custom enum that must match the options in the LABELPOSITION item above
+    ABOVE : "ABOVE",
+    LEFT  : "LEFT",
+    BELOW : "BELOW",
+    RIGHT : "RIGHT",
+    DEFAULT : "DEFAULT"
+  };
+if (Object.freeze) {
+  Object.freeze(LabelPosition);  // lock this enum object to prevent changes
+}
+
+
+var activeState = // Bad design, but this is needed for transfer of control from createLegend() to geolocate()
+    {
+      map : null,
+      markerArrays : null, // Ugh, design is really getting loose
+      vanRoutes : null, // Same comment above
+      showGeolocate : false,
+      showBathrooms : false,
+      showVanRoutes : false,
+      geolocationMarker : null
+    };
+
+
+
+function colorIcon(icon, color) {
+    return {
+        path: icon.path,
+        scale: icon.scale,
+        strokeWeight: icon.strokeWeight,
+        fillColor: icon.fillColor,
+        fillOpacity: icon.fillOpacity,
+        strokeColor: color
+    };
+}
+
+
+
+// options structure: position, icon, labelContent, labelPosition, labelStyle, mouseoverText, infowindowText
+
+function getLabeledMarker(options, mapObject) {
+    var thisLabelStyle = options.labelStyle || { };
+
+    if (options.labelPosition === LabelPosition.LEFT) {
+        thisLabelStyle.textAlign = 'right';
+    } else if (options.labelPosition === LabelPosition.RIGHT || options.labelPosition === LabelPosition.DEFAULT) {
+        thisLabelStyle.textAlign = 'left';
+    } else {
+        thisLabelStyle.textAlign = 'center';
+    }
+
+    var marker = new MarkerWithLabel({
+       position: options.position,
+       map: mapObject,
+       icon: options.icon,
+       draggable: false,
+       raiseOnDrag: false,
+       labelContent: options.labelContent,
+       labelAnchor: Config.LABELPOSITION[options.labelPosition] || Config.LABELPOSITION["DEFAULT"],
+       labelClass: 'labels',
+       labelInBackground: true,
+       labelStyle: thisLabelStyle,
+       opacity: options.strokeOpacity,
+       title: options.mouseoverText
+      });
+
+    if (options.infowindowText) {
+        var iw = new google.maps.InfoWindow({
+            content: options.infowindowText
+          });
+        google.maps.event.addListener(marker, "click", function (e) { iw.open(mapObject, this); });
+
+        if (Config.INFOWINDOW_TIMEOUT) {  // If the configuration timeout is > 0, have the window close after mouse is removed
+            google.maps.event.addListener(marker, "mouseout", 
+                function (e) { 
+                    setTimeout(function () { iw.close(); }, Config.INFOWINDOW_TIMEOUT);  // This closes the infowindow (if open) a short amount of time after removing mouse
+                }
+              );
+        }
+    }
+
+    return marker;
+}
+
+
+  function plotPointArrayKMLStrings3(arrayOfLngLatStrings, mapObject) {
+      var coloredIcon = colorIcon(Config.ICON["CIRCLE"].medium, Config.PATHSTYLE["ROAD_OPEN"].foregroundColor);
+
+      for (var i = 0; i < arrayOfLngLatStrings.length; i++) {
+
+          if (!arrayOfLngLatStrings[i]) {
+              continue;  // if value is undefined, skip it
+          }
+
+          var lngLatArray = arrayOfLngLatStrings[i].split(',');    
+          var label = (lngLatArray.length < 4) ? (i+'') : lngLatArray[3];
+
+          var markerOptions = {
+                position : new google.maps.LatLng(lngLatArray[1], lngLatArray[0]), // KML style lists lng first then lat
+                icon : coloredIcon,
+                labelContent : label,
+                labelPosition : LabelPosition.DEFAULT,
+                labelStyle : { 
+                    color : Config.PATHSTYLE["ROAD_OPEN"].labelColor,
+                    fontSize : Config.LABELFONT.medium,
+                    opacity : Config.OPACITY["LABEL"]
+                },
+                mouseoverText : label + 'x', 
+                infowindowText : label + ': (' + lngLatArray[0] + ', ' + lngLatArray[1] + ')'
+              };
+
+          getLabeledMarker(markerOptions, mapObject);
+      }
+  }
+
+
+// Signature: addPolyline(linePathArray, mapObject, lineOptions)
+// lineOptions members:  strokeOpacity, strokeWeight, strokeColor, optional icons[], optional infowindowText
+// icons[] must have member objects of the form { icon(==path), offset=='0', repeat=='15px' for normal, '12px' for tight ]
+
+function addPolyline(linePathArray, mapObject, lineOptions) {
+    var polyLine = new google.maps.Polyline({
+        path: linePathArray,
+        strokeOpacity: lineOptions.strokeOpacity,
+        icons: lineOptions.icons || [ ],
+        strokeColor: lineOptions.strokeColor || Colors.BLACK,
+        strokeWeight: lineOptions.strokeWeight || 1.0,
+        map: mapObject
+      });
+
+    if (lineOptions.infowindowText) {
+        var iw = new google.maps.InfoWindow({
+            content: lineOptions.infowindowText
+          });
+        google.maps.event.addListener(polyLine, 'click', 
+            function(event) { 
+                iw.setPosition(event.latLng);
+                iw.open(mapObject, this); 
+            }
+          );
+
+        if (Config.INFOWINDOW_TIMEOUT) {  // If the configuration timeout is > 0, have the window close after mouse is removed
+            google.maps.event.addListener(polyLine, "mouseout", 
+                function (e) { 
+                    setTimeout(function () { iw.close(); }, Config.INFOWINDOW_TIMEOUT);  // This closes the infowindow (if open) a short amount of time after removing mouse
+                }
+              );
+        }
+    }
+
+    return polyLine;
+}
+
+
+function addStyledLine(linePathArray, mapObject, pathStyleName, titleText) {
+    var thisPathStyle = Config.PATHSTYLE[pathStyleName] || Config.PATHSTYLE["DEFAULT"];
+
+    var lineOptions = { };
+
+    // lineOptions composition is very different depending on whether the pathstyle is dashed or not
+
+    var thisLineScale = thisPathStyle.scale || Config.DEFAULT_LINESCALE;
+
+    if (thisPathStyle.dashOptions) {
+        var dashedLineSymbol = {
+            path: thisPathStyle.dashOptions.path,
+            strokeColor: thisPathStyle.foregroundColor,
+            strokeOpacity: thisPathStyle.foregroundOpacity,
+            scale: thisLineScale
+          };
+
+        lineOptions.strokeColor = thisPathStyle.backgroundColor;
+        lineOptions.strokeWeight = thisLineScale * 2;
+        lineOptions.strokeOpacity = Config.OPACITY["BACKGROUND"];
+        lineOptions.icons = [{
+            icon: dashedLineSymbol,
+            offset: '100%',
+            repeat: thisPathStyle.dashOptions.repeat
+          }];
+    } else {
+        lineOptions.strokeColor = thisPathStyle.foregroundColor;
+        lineOptions.strokeWeight = thisLineScale;
+        lineOptions.strokeOpacity = thisPathStyle.foregroundOpacity;
+    }
+
+    // If titleText is defined, include it among the options.
+    if (titleText) {
+        lineOptions.infowindowText = titleText;
+    }
+
+    return addPolyline(linePathArray, mapObject, lineOptions);
+}
+
+
+// Global variables in the 'document' namespace. It would be ideal if they had their own namespace, but not practical given the source of the configuration data in getMarkerConfigs.
+var MARKER_LARGE=0, MARKER_SMALL=1;
+
+function getMarkerConfigs() {
+    // Paste configuration data inside the returned array.
+    return [
+
+        { latLngString: '40.721720, -73.950620', size: MARKER_LARGE, labelString: '0.0', pathStyle: 'TRAIL_PAVED', labelPosition: 'BELOW', labelDetails: "<b>0.0</b><small> (GPS 40.7217, -73.9506)</small>: START<br><div style='width:200px'>Head Northeast on Driggs.</div>", mouseoverText: '0.0 START: Head Northeast on Driggs.', majorLabel: '0'  }, 
+        { latLngString: '40.722230, -73.949860', size: MARKER_SMALL, labelString: '0.1', pathStyle: 'ROAD_OPEN', labelPosition: 'RIGHT', labelDetails: "<b>0.1</b>: LEFT<br><div style='width:200px'>Left on Manhattan Ave.</div>", mouseoverText: '0.1 LEFT: Manhattan Ave'  }, 
+        { latLngString: '40.730170, -73.954200', size: MARKER_SMALL, labelString: '0.7', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>0.7</b>: RIGHT<br><div style='width:200px'>Right on Greenpoint Ave.</div>", mouseoverText: '0.7 RIGHT: Greenpoint Ave'  }, 
+        { latLngString: '40.730410, -73.951610', size: MARKER_SMALL, labelString: '0.8', pathStyle: 'ROAD_OPEN', labelPosition: 'RIGHT', labelDetails: "<b>0.8</b>: LEFT<br><div style='width:200px'>Left on McGuinness Blvd. Stay on LEFT side of road.</div>", mouseoverText: '0.8 LEFT: McGuinness Blvd'  }, 
+        { latLngString: '40.735460, -73.952810', size: MARKER_SMALL, labelString: '1.1', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>1.1</b>: STRAIGHT<br><div style='width:200px'>Enter Pulaski Bridge pedestrian path (on west side) at Eagle St.</div>", mouseoverText: '1.1 STRAIGHT: Enter Pulaski Bridge pedestrian path'  }, 
+
+        { latLngString: '40.743620, -73.951340', size: MARKER_SMALL, labelString: '1.7', pathStyle: 'ROAD_OPEN', labelPosition: 'RIGHT', labelDetails: "<b>1.7</b>: LEFT<br><div style='width:200px'>Left on 48th Ave (after exiting the bridge).</div>", mouseoverText: '1.7 LEFT: 48th Ave'  }, 
+        { latLngString: '40.744140, -73.953680', size: MARKER_SMALL, labelString: '1.9', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>1.9</b>: RIGHT<br><div style='width:200px'>Right on Vernon Blvd.</div>", mouseoverText: '1.9 RIGHT: Vernon Blvd'  }, 
+        { latLngString: '40.761981, -73.942512', size: MARKER_LARGE, labelString: '3.2', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>3.2</b><small> (GPS 40.7620, -73.9425)</small>: STRAIGHT<br><div style='width:200px'>Continue straight passing Roosevelt Island Bridge.</div>", mouseoverText: '3.2 STRAIGHT: Continue straight passing Roosevelt Island Bridge.'  }, 
+        { latLngString: '40.772060, -73.933150', size: MARKER_SMALL, labelString: '4.2', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>4.2</b>: LEFT<br><div style='width:200px'>Slight Left on 8th Street.</div>", mouseoverText: '4.2 LEFT: Slight Left on 8th Street.'  }, 
+        { latLngString: '40.774180, -73.931870', size: MARKER_SMALL, labelString: '4.4', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>4.4</b>: RIGHT<br><div style='width:200px'>Right on 27th Ave.</div>", mouseoverText: '4.4 RIGHT: 27th Ave'  }, 
+        { latLngString: '40.773570, -73.929930', size: MARKER_SMALL, labelString: '4.5', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>4.5</b>: LEFT<br><div style='width:200px'>Left on 12th St/Shore Blvd.</div>", mouseoverText: '4.5 LEFT: 12th St/Shore Blvd'  }, 
+        { latLngString: '40.776750, -73.927860', size: MARKER_LARGE, labelString: '4.7', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>4.7</b><small> (GPS 40.7768, -73.9279)</small>: RIGHT<br><div style='width:200px'>Right on Astoria Park S. Road name changes to Hoyt Ave S.</div>", mouseoverText: '4.7 RIGHT: Astoria Park S'  }, 
+        { latLngString: '40.773100, -73.921460', size: MARKER_SMALL, labelString: '5.1', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>5.1</b>: LEFT<br><div style='width:200px'>Left on Crescent St.</div>", mouseoverText: '5.1 LEFT: Crescent St'  }, 
+        { latLngString: '40.773440, -73.921020', size: MARKER_SMALL, labelString: '5.2', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>5.2</b>: RIGHT<br><div style='width:200px'>Right on Hoyt Ave N.</div>", mouseoverText: '5.2 RIGHT: Hoyt Ave N'  }, 
+        { latLngString: '40.772390, -73.919550', size: MARKER_LARGE, labelString: '5.3', pathStyle: 'ROAD_OPEN', labelPosition: 'RIGHT', labelDetails: "<b>5.3</b><small> (GPS 40.7724, -73.9196)</small>: RIGHT<br><div style='width:200px'>Right onto the stairs for the Pedestrian Path of the Triboro Bridge.</div>", mouseoverText: '5.3 RIGHT: Right onto the stairs for the Pedestrian Path of the Triboro Bridge.'  }, 
+        { latLngString: '40.787940, -73.928000', size: MARKER_SMALL, labelString: '6.6', pathStyle: 'ROAD_NOVANACCESS', labelPosition: 'DEFAULT', labelDetails: "<b>6.6</b>: STRAIGHT<br><div style='width:200px'>Exit Pedestrian Path continuing onto Hells Gate Circle.</div>", mouseoverText: '6.6 STRAIGHT: Exit Pedestrian Path continuing onto Hells Gate Circle.'  }, 
+        { latLngString: '40.790050, -73.925830', size: MARKER_SMALL, labelString: '6.8', pathStyle: 'TRAIL_PAVED', labelPosition: 'ABOVE', labelDetails: "<b>6.8</b>: LEFT<br><div style='width:200px'>Left on Harlem River Pathway. This is an unmarked gravel walking path on the left crossing under the elevated Triboro Bridge highway.</div>", mouseoverText: '6.8 LEFT: Harlem River Pathway'  }, 
+        { latLngString: '40.785210, -73.935250', size: MARKER_SMALL, labelString: '7.5', pathStyle: 'TRAIL_PAVED', labelPosition: 'BELOW', labelDetails: "<b>7.5</b>: RIGHT<br><div style='width:200px'>Right onto the Ward\'s Island Pedestrian Bridge.</div>", mouseoverText: '7.5 RIGHT: Ward\'s Island Pedestrian Bridge'  }, 
+
+        { latLngString: '40.786150, -73.939560', size: MARKER_LARGE, labelString: '7.9', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>7.9</b><small> (GPS 40.7862, -73.9396)</small>: RIGHT<br><div style='width:200px'>Right on E 102nd Street.</div>", mouseoverText: '7.9 RIGHT: E 102nd St'  }, 
+        { latLngString: '40.787127, -73.941942', size: MARKER_SMALL, labelString: '8.0', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>8.0</b>: RIGHT<br><div style='width:200px'>Right on 1st Ave. Run on WEST (left) side of 1st Ave.</div>", mouseoverText: '8.0 RIGHT: 1st Ave'  }, 
+        { latLngString: '40.801740, -73.931240', size: MARKER_LARGE, labelString: '9.2', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>9.2</b><small> (GPS 40.8017, -73.9312)</small>: STRAIGHT<br><div style='width:200px'>Enter Pedestrian Path on LEFT side of 1st Ave to cross the Willis Ave Bridge.</div>", mouseoverText: '9.2 STRAIGHT: Enter Willis Ave Bridge pedestrian path'  }, 
+        { latLngString: '40.807220, -73.924430', size: MARKER_SMALL, labelString: '9.7', pathStyle: 'ROAD_NOVANACCESS', labelPosition: 'DEFAULT', labelDetails: "<b>9.7</b>: STRAIGHT<br><div style='width:200px'>Exit Bridge. Continue Straight on Willis Ave.</div>", mouseoverText: '9.7 STRAIGHT: Willis Ave'  }, 
+        { latLngString: '40.809210, -73.922980', size: MARKER_SMALL, labelString: '9.8', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>9.8</b>: LEFT<br><div style='width:200px'>Cross E 138th and turn LEFT. Run on NORTH side of 138th St.</div>", mouseoverText: '9.8 LEFT: E 138th St'  }, 
+        { latLngString: '40.813660, -73.930950', size: MARKER_LARGE, labelString: '10.4', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>10.4</b><small> (GPS 40.8137, -73.9310)</small>: RIGHT<br><div style='width:200px'>Right on Gerard Ave. Stay on RIGHT side of street to avoid accidentally getting onto highway.</div>", mouseoverText: '10.4 RIGHT: Gerard Ave', majorLabel: '10'  }, 
+        { latLngString: '40.827350, -73.925090', size: MARKER_SMALL, labelString: '11.4', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>11.4</b>: LEFT<br><div style='width:200px'>Left on E 161st Street. Stay on FAR LEFT side of E 161st, on slightly elevated lane adjacent to park.</div>", mouseoverText: '11.4 LEFT: E 161st St (left side)'  }, 
+        { latLngString: '40.829110, -73.929050', size: MARKER_SMALL, labelString: '11.6', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>11.6</b>: LEFT<br><div style='width:200px'>Left on Macombs Dam Bridge. Stay on RIGHT side of street to access bridge path</div>", mouseoverText: '11.6 LEFT: Macombs Dam Bridge'  }, 
+        { latLngString: '40.828130, -73.934560', size: MARKER_SMALL, labelString: '11.9', pathStyle: 'ROAD_NOVANACCESS', labelPosition: 'BELOW', labelDetails: "<b>11.9</b>: STRAIGHT<br><div style='width:200px'>Stay on path (bearing right above Harlem River Drive) onto West 155th Street.</div>", mouseoverText: '11.9 STRAIGHT: W 155th St'  }, 
+        { latLngString: '40.830516, -73.940323', size: MARKER_SMALL, labelString: '12.3', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>12.3</b>: RIGHT<br><div style='width:200px'>Right on Edgecombe Ave.</div>", mouseoverText: '12.3 RIGHT: Edgecombe Ave'  }, 
+        { latLngString: '40.837090, -73.936690', size: MARKER_LARGE, labelString: '12.8', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>12.8</b><small> (GPS 40.8371, -73.9367)</small>: RIGHT<br><div style='width:200px'>Right into the Park at 165th Street.</div>", mouseoverText: '12.8 RIGHT: Right into the Park at 165th Street.'  }, 
+        { latLngString: '40.842480, -73.931850', size: MARKER_SMALL, labelString: '13.3', pathStyle: 'TRAIL_PAVED', labelPosition: 'ABOVE', labelDetails: "<b>13.3</b>: CROSS<br><div style='width:200px'>Follow Park Path to Entrance of the High Bridge. Cross High Bridge.</div>", mouseoverText: '13.3 CROSS: Follow Park Path to Entrance of the High Bridge. Cross High Bridge.'  }, 
+
+        { latLngString: '40.841990, -73.926730', size: MARKER_SMALL, labelString: '13.6', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>13.6</b>: RIGHT<br><div style='width:200px'>After crossing High Bridge, Bear Right at the fork out of the park.</div>", mouseoverText: '13.6 RIGHT: After crossing High Bridge, Bear Right at the fork out of the park.'  }, 
+        { latLngString: '40.841700, -73.926600', size: MARKER_SMALL, labelString: '13.6', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>13.6</b>: LEFT<br><div style='width:200px'>Left on University Ave.</div>", mouseoverText: '13.6 LEFT: University Ave'  }, 
+        { latLngString: '40.842090, -73.926290', size: MARKER_LARGE, labelString: '13.6', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>13.6</b><small> (GPS 40.8421, -73.9263)</small>: RIGHT<br><div style='width:200px'>Quick Right on 170th St.</div>", mouseoverText: '13.6 RIGHT: Quick Right on 170th St.'  }, 
+        { latLngString: '40.838781, -73.913440', size: MARKER_LARGE, labelString: '14.4', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>14.4</b><small> (GPS 40.8388, -73.9134)</small>: LEFT<br><div style='width:200px'>At Grand Concourse, cross all four lanes and TURN LEFT to stay on EAST side of street</div>", mouseoverText: '14.4 LEFT: Grand Concourse (right side)'  }, 
+        { latLngString: '40.849925, -73.905321', size: MARKER_LARGE, labelString: '15.3', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>15.3</b><small> (GPS 40.8499, -73.9053)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Grand Concourse passing Tremont Ave subway stop at Echo Pl.</div>", mouseoverText: '15.3 STRAIGHT: Passing Tremont'  }, 
+        { latLngString: '40.862500, -73.896840', size: MARKER_LARGE, labelString: '16.2', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>16.2</b><small> (GPS 40.8625, -73.8968)</small>: RIGHT<br><div style='width:200px'>At E Fordham Road, cross all lanes and TURN RIGHT to stay on NORTH side of street</div>", mouseoverText: '16.2 RIGHT: E Fordham Rd (north side)'  }, 
+        { latLngString: '40.857020, -73.870590', size: MARKER_SMALL, labelString: '17.9', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>17.9</b>: STRAIGHT<br><div style='width:200px'>Enter Bronx and Pelham Parkway Paved Path, parallel to the Bronx and Pelham Parkway, shortly after passing under Bronx River Parkway.</div>", mouseoverText: '17.9 STRAIGHT: Bronx and Pelham Parkway Paved Path'  }, 
+        { latLngString: '40.856870, -73.836920', size: MARKER_SMALL, labelString: '19.8', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>19.8</b>: CROSS<br><div style='width:200px'>At Stilwell Ave, Cross from north to south side of Bronx and Pelham Parkway. Continue eastbound on paved path, which weaves frequently. Just keep heading parallel to Bronx and Pelham Parkway.</div>", mouseoverText: '19.8 CROSS: At Stilwell Ave, Cross from north to south side of Bronx and Pelham Parkway'  }, 
+        { latLngString: '40.855950, -73.821720', size: MARKER_LARGE, labelString: '20.6', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>20.6</b><small> (GPS 40.8560, -73.8217)</small>: LEFT<br><div style='width:200px'>Turn left to Follow Path alone Shore Road (run along right side of road).</div>", mouseoverText: '20.6 LEFT: Shore Rd (right side)'  }, 
+        { latLngString: '40.864690, -73.813530', size: MARKER_LARGE, labelString: '21.4', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>21.4</b><small> (GPS 40.8647, -73.8135)</small>: CROSS<br><div style='width:200px'>At City Island Road, cross from right to left side of Shore Road.</div>", mouseoverText: '21.4 CROSS: At City Island Road, cross from right to left side of Shore Road.', majorLabel: '21'  }, 
+
+        { latLngString: '40.881110, -73.796010', size: MARKER_SMALL, labelString: '23.0', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>23.0</b>: STRAIGHT<br><div style='width:200px'>Stay on paved path as it veers away from Shore Road.</div>", mouseoverText: '23.0 STRAIGHT: Stay on paved path as it veers away from Shore Road.'  }, 
+        { latLngString: '40.884070, -73.797430', size: MARKER_SMALL, labelString: '23.3', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>23.3</b>: STRAIGHT<br><div style='width:200px'>Exit Path onto Park Lane, continue straight</div>", mouseoverText: '23.3 STRAIGHT: Park Lane'  }, 
+        { latLngString: '40.887450, -73.798900', size: MARKER_SMALL, labelString: '23.5', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>23.5</b>: RIGHT<br><div style='width:200px'>Right on Manor Circle.</div>", mouseoverText: '23.5 RIGHT: Manor Circle'  }, 
+        { latLngString: '40.890540, -73.799710', size: MARKER_LARGE, labelString: '23.8', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>23.8</b><small> (GPS 40.8905, -73.7997)</small>: LEFT<br><div style='width:200px'>Left on Pelhamdale Ave.</div>", mouseoverText: '23.8 LEFT: Pelhamdale Ave'  }, 
+        { latLngString: '40.902180, -73.810240', size: MARKER_LARGE, labelString: '24.8', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>24.8</b><small> (GPS 40.9022, -73.8102)</small>: LEFT<br><div style='width:200px'>Left on Colonial Ave.</div>", mouseoverText: '24.8 LEFT: Colonial Ave'  }, 
+        { latLngString: '40.902740, -73.813650', size: MARKER_SMALL, labelString: '25.0', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>25.0</b>: RIGHT<br><div style='width:200px'>Right on Wolfs Lane.</div>", mouseoverText: '25.0 RIGHT: Wolfs Lane'  }, 
+        { latLngString: '40.910077, -73.810381', size: MARKER_LARGE, labelString: '25.5', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>25.5</b><small> (GPS 40.9101, -73.8104)</small>: STRAIGHT<br><div style='width:200px'>Road name changes to Fifth Ave passing Pelham Train Station. Later road name changes to Pelhamdale Rd.</div>", mouseoverText: '25.5 STRAIGHT: Passing Pelham Train Station'  }, 
+        { latLngString: '40.926742, -73.805079', size: MARKER_SMALL, labelString: '26.7', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>26.7</b>: RIGHT<br><div style='width:200px'>Right on Robins Rd. Pass around back side of buildings to get to trail access point.</div>", mouseoverText: '26.7 RIGHT: Right on Robins Rd. Pass around back side of buildings to get to trail access point.'  }, 
+        { latLngString: '40.928033, -73.803070', size: MARKER_LARGE, labelString: '26.9', pathStyle: 'TRAIL_UNPAVED', labelPosition: 'BELOW', labelDetails: "<b>26.9</b><small> (GPS 40.9280, -73.8031)</small>: STRAIGHT<br><div style='width:200px'>Enter Running Trail.</div>", mouseoverText: '26.9 STRAIGHT: Enter Running Trail.'  }, 
+        { latLngString: '40.930600, -73.798170', size: MARKER_SMALL, labelString: '27.3', pathStyle: 'TRAIL_UNPAVED', labelPosition: 'BELOW', labelDetails: "<b>27.3</b>: STRAIGHT<br><div style='width:200px'>Exit Trail continuing on Flandreau Ave.</div>", mouseoverText: '27.3 STRAIGHT: Exit Trail continuing on Flandreau Ave.'  }, 
+        { latLngString: '40.930430, -73.794520', size: MARKER_LARGE, labelString: '27.5', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>27.5</b><small> (GPS 40.9304, -73.7945)</small>: LEFT<br><div style='width:200px'>Left on Argyle Ave.</div>", mouseoverText: '27.5 LEFT: Argyle Ave'  }, 
+        { latLngString: '40.931840, -73.794940', size: MARKER_SMALL, labelString: '27.6', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>27.6</b>: RIGHT<br><div style='width:200px'>Right on Calton Rd, stay right at next two forks</div>", mouseoverText: '27.6 RIGHT: Calton Rd'  }, 
+        { latLngString: '40.932080, -73.793405', size: MARKER_SMALL, labelString: '27.7', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>27.7</b>: RIGHT<br><div style='width:200px'>Right on Glenfrum Ave at fork.</div>", mouseoverText: '27.7 RIGHT: Glenfrum Ave'  }, 
+        { latLngString: '40.933110, -73.792210', size: MARKER_SMALL, labelString: '27.8', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>27.8</b>: RIGHT<br><div style='width:200px'>Right on Braemar Ave.</div>", mouseoverText: '27.8 RIGHT: Braemar Ave'  }, 
+        { latLngString: '40.933070, -73.790890', size: MARKER_SMALL, labelString: '27.8', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>27.8</b>: LEFT THEN RIGHT<br><div style='width:200px'>After crossing North Ave, bear left on Sicard Ave, then quick right onto Broadview Ave, which becomes Lyncroft Rd</div>", mouseoverText: '27.8 LEFT THEN RIGHT: Left on Sicard Ave, quick right onto Broadview Ave'  }, 
+        { latLngString: '40.938380, -73.780840', size: MARKER_LARGE, labelString: '28.5', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>28.5</b><small> (GPS 40.9384, -73.7808)</small>: RIGHT<br><div style='width:200px'>Immediately after semicircular driveway at 318 Lyncroft, turn right onto paved path that looks like a driveway, then continue Straight on Hillside Crescent.</div>", mouseoverText: '28.5 RIGHT: Unmarked path to Hillside Crescent'  }, 
+        { latLngString: '40.940020, -73.778540', size: MARKER_SMALL, labelString: '28.7', pathStyle: 'TRAIL_UNPAVED', labelPosition: 'BELOW', labelDetails: "<b>28.7</b>: STRAIGHT<br><div style='width:200px'>Continue straight to Enter Leatherstocking Trail.</div>", mouseoverText: '28.7 STRAIGHT: Continue straight to Enter Leatherstocking Trail.'  }, 
+        { latLngString: '40.947380, -73.764080', size: MARKER_LARGE, labelString: '29.8', pathStyle: 'TRAIL_UNPAVED', labelPosition: 'BELOW', labelDetails: "<b>29.8</b><small> (GPS 40.9474, -73.7641)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Leatherstocking Trail crossing Weaver St, then (later) Highland Rd, Winged Foot Dr.</div>", mouseoverText: '29.8 STRAIGHT: Crossing Weaver St', majorLabel: '30'  }, 
+        { latLngString: '40.952560, -73.751530', size: MARKER_SMALL, labelString: '30.6', pathStyle: 'TRAIL_UNPAVED', labelPosition: 'BELOW', labelDetails: "<b>30.6</b>: STRAIGHT<br><div style='width:200px'>Continue straight on Leatherstocking Trail crossing Avon Rd and then (later) Fenimore Rd, Country Rd.</div>", mouseoverText: '30.6 STRAIGHT: Crossing Avon Rd'  }, 
+        { latLngString: '40.957760, -73.743170', size: MARKER_LARGE, labelString: '31.2', pathStyle: 'TRAIL_UNPAVED', labelPosition: 'BELOW', labelDetails: "<b>31.2</b><small> (GPS 40.9578, -73.7432)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Leatherstocking Trail crossing Old White Plains Rd.</div>", mouseoverText: '31.2 STRAIGHT: Crossing Old White Plains Rd'  }, 
+        { latLngString: '40.958930, -73.741390', size: MARKER_SMALL, labelString: '31.4', pathStyle: 'TRAIL_UNPAVED', labelPosition: 'BELOW', labelDetails: "<b>31.4</b>: LEFT<br><div style='width:200px'>Left on Rockridge Rd, following trail markers.</div>", mouseoverText: '31.4 LEFT: Rockridge Rd'  }, 
+        { latLngString: '40.960010, -73.741620', size: MARKER_SMALL, labelString: '31.4', pathStyle: 'ROAD_OPEN', labelPosition: 'RIGHT', labelDetails: "<b>31.4</b>: LEFT<br><div style='width:200px'>Left at fork on Deerfield Ln, following trail markers.</div>", mouseoverText: '31.4 LEFT: Deerfield Ln'  }, 
+        { latLngString: '40.959390, -73.743580', size: MARKER_SMALL, labelString: '31.6', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>31.6</b>: RIGHT<br><div style='width:200px'>Right on Old White Plains Rd.</div>", mouseoverText: '31.6 RIGHT: Old White Plains Rd'  }, 
+        { latLngString: '40.960140, -73.744930', size: MARKER_LARGE, labelString: '31.7', pathStyle: 'TRAIL_UNPAVED', labelPosition: 'BELOW', labelDetails: "<b>31.7</b><small> (GPS 40.9601, -73.7449)</small>: RIGHT<br><div style='width:200px'>Right on Colonial Greenway Trail.</div>", mouseoverText: '31.7 RIGHT: Right on Colonial Greenway Trail.'  }, 
+        { latLngString: '40.962130, -73.744140', size: MARKER_SMALL, labelString: '31.8', pathStyle: 'TRAIL_UNPAVED', labelPosition: 'LEFT', labelDetails: "<b>31.8</b>: RIGHT<br><div style='width:200px'>Take right fork to Follow Yellow Trail Markers.</div>", mouseoverText: '31.8 RIGHT: Follow yellow trail markers'  }, 
+        { latLngString: '40.978400, -73.744660', size: MARKER_SMALL, labelString: '33.2', pathStyle: 'TRAIL_UNPAVED', labelPosition: 'DEFAULT', labelDetails: "<b>33.2</b>: STRAIGHT<br><div style='width:200px'>Continue straight passing over park access roadway (follow Yellow Trail makers).</div>", mouseoverText: '33.2 STRAIGHT: Follow yellow trail markers'  }, 
+        { latLngString: '40.982600, -73.745110', size: MARKER_SMALL, labelString: '33.6', pathStyle: 'TRAIL_UNPAVED', labelPosition: 'LEFT', labelDetails: "<b>33.6</b>: RIGHT<br><div style='width:200px'>Right over the Mamaroneck River</div>", mouseoverText: '33.6 RIGHT: Right over the Mamaroneck River'  }, 
+        { latLngString: '40.983010, -73.744190', size: MARKER_SMALL, labelString: '33.6', pathStyle: 'TRAIL_UNPAVED', labelPosition: 'DEFAULT', labelDetails: "<b>33.6</b>: RIGHT<br><div style='width:200px'>Right on Mamaroneck Ave. Stay on RIGHT side of road and RUN CAREFULLY (no sidewalk -- narrow shoulder).</div>", mouseoverText: '33.6 RIGHT: Mamaroneck Ave'  }, 
+        { latLngString: '40.981800, -73.743970', size: MARKER_SMALL, labelString: '33.7', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>33.7</b>: LEFT<br><div style='width:200px'>Left on Union Ave.</div>", mouseoverText: '33.7 LEFT: Union Ave'  }, 
+        { latLngString: '40.980170, -73.738000', size: MARKER_LARGE, labelString: '34.1', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>34.1</b><small> (GPS 40.9802, -73.7380)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Harrison Ave passing Harrison High School.</div>", mouseoverText: '34.1 STRAIGHT: Passing Harrison High School'  }, 
+        { latLngString: '40.979090, -73.713260', size: MARKER_SMALL, labelString: '35.4', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>35.4</b>: RIGHT<br><div style='width:200px'>Right on Harrison Ave / NY Route 127.</div>", mouseoverText: '35.4 RIGHT: Harrison Ave'  }, 
+        { latLngString: '40.968850, -73.712735', size: MARKER_LARGE, labelString: '36.1', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>36.1</b><small> (GPS 40.9689, -73.7127)</small>: LEFT<br><div style='width:200px'>Left on Halstead Ave (at Harrison train station).</div>", mouseoverText: '36.1 LEFT: Halstead Ave'  }, 
+        { latLngString: '40.969827, -73.707688', size: MARKER_SMALL, labelString: '36.4', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>36.4</b>: RIGHT<br><div style='width:200px'>Right at the fork on Osborn Rd.</div>", mouseoverText: '36.4 RIGHT: Osborn Rd'  }, 
+        { latLngString: '40.962200, -73.687990', size: MARKER_SMALL, labelString: '37.6', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>37.6</b>: RIGHT<br><div style='width:200px'>Right on Milton Rd.</div>", mouseoverText: '37.6 RIGHT: Milton Rd'  }, 
+        { latLngString: '40.960890, -73.688480', size: MARKER_SMALL, labelString: '37.7', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>37.7</b>: LEFT<br><div style='width:200px'>First Left on Dearborn Ave.</div>", mouseoverText: '37.7 LEFT: Dearborn Ave'  }, 
+        { latLngString: '40.959440, -73.680760', size: MARKER_SMALL, labelString: '38.1', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>38.1</b>: LEFT<br><div style='width:200px'>Left up stairs onto Rye Town Beach Path.</div>", mouseoverText: '38.1 LEFT: Rye Town Beach Path'  }, 
+        { latLngString: '40.964530, -73.675000', size: MARKER_LARGE, labelString: '38.6', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>38.6</b><small> (GPS 40.9645, -73.6750)</small>: CHECKPOINT<br><div style='width:200px'>Follow around to the Boardwalk and Rye Playland Park. CHECKPOINT 1: RYE PLAYLAND PARK, between Mini-Golf and Ice Casino.</div>", mouseoverText: '38.6 CHECKPOINT: Rye Playland Park', majorLabel: '39'  }, 
+        { latLngString: '40.965130, -73.675460', size: MARKER_SMALL, labelString: '38.7', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>38.7</b>: STRAIGHT<br><div style='width:200px'>Exit via Playland Parkway.</div>", mouseoverText: '38.7 STRAIGHT: Exit via Playland Parkway.'  }, 
+        { latLngString: '40.964820, -73.678630', size: MARKER_SMALL, labelString: '38.9', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>38.9</b>: RIGHT<br><div style='width:200px'>Stay right to exit via Playland Parkway.</div>", mouseoverText: '38.9 RIGHT: Stay right to exit via Playland Parkway.'  }, 
+        { latLngString: '40.965660, -73.680930', size: MARKER_SMALL, labelString: '39.0', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>39.0</b>: RIGHT<br><div style='width:200px'>Right on Forest Ave.</div>", mouseoverText: '39.0 RIGHT: Forest Ave'  }, 
+        { latLngString: '40.982160, -73.672880', size: MARKER_SMALL, labelString: '40.2', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>40.2</b>: RIGHT<br><div style='width:200px'>Right on Grace Church St.</div>", mouseoverText: '40.2 RIGHT: Grace Church St'  }, 
+        { latLngString: '40.997810, -73.665390', size: MARKER_SMALL, labelString: '41.5', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>41.5</b>: STRAIGHT<br><div style='width:200px'>Continue on S Main St / US Route 1.</div>", mouseoverText: '41.5 STRAIGHT: S Main St'  }, 
+        { latLngString: '41.004420, -73.660160', size: MARKER_SMALL, labelString: '42.1', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>42.1</b>: RIGHT<br><div style='width:200px'>Right on Mill St.</div>", mouseoverText: '42.1 RIGHT: Mill St'  }, 
+
+        { latLngString: '41.003630, -73.649530', size: MARKER_LARGE, labelString: '42.7', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>42.7</b><small> (GPS 41.0036, -73.6495)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on Ritch Ave W passing Byram Park. Road name will turn into Hamilton Ave.</div>", mouseoverText: '42.7 STRAIGHT: Passing Byram Park'  }, 
+        { latLngString: '41.021490, -73.636860', size: MARKER_SMALL, labelString: '44.2', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>44.2</b>: RIGHT<br><div style='width:200px'>Bear Right on Old Field Point Rd. Road name will turn into Railroad Ave in 2 blocks.</div>", mouseoverText: '44.2 RIGHT: Old Field Point Rd'  }, 
+        { latLngString: '41.021560, -73.627210', size: MARKER_LARGE, labelString: '44.7', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>44.7</b><small> (GPS 41.0216, -73.6272)</small>: RIGHT<br><div style='width:200px'>Right on Arch St (at Greenwich Train Station). Road name will turn into Museum Dr after Steamboat Rd.</div>", mouseoverText: '44.7 RIGHT: Arch St'  }, 
+        { latLngString: '41.020820, -73.619780', size: MARKER_SMALL, labelString: '45.3', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>45.3</b>: LEFT<br><div style='width:200px'>Left on Indian Harbor Dr.</div>", mouseoverText: '45.3 LEFT: Indian Harbor Dr'  }, 
+        { latLngString: '41.022094, -73.615863', size: MARKER_SMALL, labelString: '45.5', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>45.5</b>: STRAIGHT<br><div style='width:200px'>Stay Left at fork on Bruce Park Drive.</div>", mouseoverText: '45.5 STRAIGHT: Stay Left at fork on Bruce Park Drive.'  }, 
+        { latLngString: '41.024200, -73.605730', size: MARKER_SMALL, labelString: '46.2', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>46.2</b>: LEFT<br><div style='width:200px'>Left on Indian Field Rd.</div>", mouseoverText: '46.2 LEFT: Indian Field Rd'  }, 
+        { latLngString: '41.036650, -73.606710', size: MARKER_LARGE, labelString: '47.0', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>47.0</b><small> (GPS 41.0367, -73.6067)</small>: RIGHT<br><div style='width:200px'>Right on E Putnam Ave / US Route 1.</div>", mouseoverText: '47.0 RIGHT: E Putnam Ave'  }, 
+        { latLngString: '41.039230, -73.596990', size: MARKER_SMALL, labelString: '47.6', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>47.6</b>: LEFT<br><div style='width:200px'>Left on Orchard St.</div>", mouseoverText: '47.6 LEFT: Orchard St'  }, 
+        { latLngString: '41.039750, -73.596720', size: MARKER_SMALL, labelString: '47.6', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>47.6</b>: QUICK<br><div style='width:200px'>Quick Right on Valley Rd.</div>", mouseoverText: '47.6 QUICK: Valley Rd'  }, 
+        { latLngString: '41.041030, -73.595570', size: MARKER_SMALL, labelString: '47.7', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>47.7</b>: RIGHT<br><div style='width:200px'>Stay right to stay on Valley Rd.</div>", mouseoverText: '47.7 RIGHT: Stay right to stay on Valley Rd.'  }, 
+        { latLngString: '41.057580, -73.582670', size: MARKER_LARGE, labelString: '49.1', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>49.1</b><small> (GPS 41.0576, -73.5827)</small>: RIGHT<br><div style='width:200px'>Right on Palmer Hill Rd.</div>", mouseoverText: '49.1 RIGHT: Palmer Hill Rd'  }, 
+        { latLngString: '41.058720, -73.559930', size: MARKER_SMALL, labelString: '50.4', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>50.4</b>: LEFT<br><div style='width:200px'>Left on Stillwater Rd.</div>", mouseoverText: '50.4 LEFT: Stillwater Rd'  }, 
+        { latLngString: '41.064450, -73.558420', size: MARKER_SMALL, labelString: '50.8', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>50.8</b>: RIGHT<br><div style='width:200px'>Right on Bridge St.</div>", mouseoverText: '50.8 RIGHT: Bridge St'  }, 
+        { latLngString: '41.066940, -73.545770', size: MARKER_LARGE, labelString: '51.5', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>51.5</b><small> (GPS 41.0669, -73.5458)</small>: RIGHT<br><div style='width:200px'>Right on Summer St.</div>", mouseoverText: '51.5 RIGHT: Summer St', majorLabel: '51'  }, 
+        { latLngString: '41.064190, -73.543260', size: MARKER_SMALL, labelString: '51.7', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>51.7</b>: LEFT<br><div style='width:200px'>Left on 3rd St. Road name will turn into Strawberry Hill Ct in a few blocks</div>", mouseoverText: '51.7 LEFT: 3rd St'  }, 
+        { latLngString: '41.065650, -73.533140', size: MARKER_SMALL, labelString: '52.2', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>52.2</b>: STRAIGHT<br><div style='width:200px'>Straight onto Rock Spring Rd.</div>", mouseoverText: '52.2 STRAIGHT: Rock Spring Rd'  }, 
+        { latLngString: '41.068410, -73.526780', size: MARKER_SMALL, labelString: '52.6', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>52.6</b>: LEFT<br><div style='width:200px'>Left on Hope St.</div>", mouseoverText: '52.6 LEFT: Hope St'  }, 
+        { latLngString: '41.071480, -73.523930', size: MARKER_SMALL, labelString: '52.9', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>52.9</b>: RIGHT<br><div style='width:200px'>Right on Church St / Pine Hill Ave. Road name will turn into Glenbrook Rd</div>", mouseoverText: '52.9 RIGHT: Church St / Pine Hill Ave'  }, 
+        { latLngString: '41.071780, -73.520020', size: MARKER_LARGE, labelString: '53.1', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>53.1</b><small> (GPS 41.0718, -73.5200)</small>: STRAIGHT<br><div style='width:200px'>Road name changes to Glenbrook Rd passing parking lot for Glenbrook train station.</div>", mouseoverText: '53.1 STRAIGHT: Passing Glenbrook train station'  }, 
+        { latLngString: '41.073000, -73.518410', size: MARKER_SMALL, labelString: '53.3', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>53.3</b>: RIGHT<br><div style='width:200px'>Right on Courtland Ave / CT Route 106.</div>", mouseoverText: '53.3 RIGHT: Courtland Ave'  }, 
+        { latLngString: '41.071160, -73.516480', size: MARKER_SMALL, labelString: '53.4', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>53.4</b>: LEFT<br><div style='width:200px'>Left on Maple Tree Ave.</div>", mouseoverText: '53.4 LEFT: Maple Tree Ave'  }, 
+        { latLngString: '41.070710, -73.495140', size: MARKER_LARGE, labelString: '54.6', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>54.6</b><small> (GPS 41.0707, -73.4951)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on West Ave passing Stop & Shop shopping center at Edgerton St.</div>", mouseoverText: '54.6 STRAIGHT: Passing Stop & Shop shopping center'  }, 
+        { latLngString: '41.077390, -73.469980', size: MARKER_LARGE, labelString: '56.1', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>56.1</b><small> (GPS 41.0774, -73.4700)</small>: LEFT<br><div style='width:200px'>Left on Post Rd / US Route 1 just past Darrien train station</div>", mouseoverText: '56.1 LEFT: Post Rd / US Route 1'  }, 
+        { latLngString: '41.085090, -73.462100', size: MARKER_LARGE, labelString: '56.8', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>56.8</b><small> (GPS 41.0851, -73.4621)</small>: RIGHT<br><div style='width:200px'>Right on Old Kings Highway North (at Trader Joe\'s). Road name will turn into Flax Hill Rd in a few blocks</div>", mouseoverText: '56.8 RIGHT: Old Kings Highway North'  }, 
+        { latLngString: '41.088320, -73.446540', size: MARKER_SMALL, labelString: '57.7', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>57.7</b>: LEFT<br><div style='width:200px'>Bear left to stay on Flax Hill Rd.</div>", mouseoverText: '57.7 LEFT: Bear left to stay on Flax Hill Rd.'  }, 
+        { latLngString: '41.099910, -73.422910', size: MARKER_LARGE, labelString: '59.3', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>59.3</b><small> (GPS 41.0999, -73.4229)</small>: RIGHT<br><div style='width:200px'>Right on West Washington St / CT Route 136.</div>", mouseoverText: '59.3 RIGHT: West Washington St'  }, 
+        { latLngString: '41.099730, -73.411920', size: MARKER_SMALL, labelString: '59.9', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>59.9</b>: RIGHT<br><div style='width:200px'>Right on Seaview Ave.</div>", mouseoverText: '59.9 RIGHT: Seaview Ave'  }, 
+        { latLngString: '41.098780, -73.406070', size: MARKER_SMALL, labelString: '60.2', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>60.2</b>: LEFT<br><div style='width:200px'>Left on East Ave.</div>", mouseoverText: '60.2 LEFT: East Ave'  }, 
+        { latLngString: '41.101830, -73.403660', size: MARKER_LARGE, labelString: '60.5', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>60.5</b><small> (GPS 41.1018, -73.4037)</small>: RIGHT<br><div style='width:200px'>Right on Cemetery St</div>", mouseoverText: '60.5 RIGHT: Cemetery St'  }, 
+        { latLngString: '41.102170, -73.402470', size: MARKER_SMALL, labelString: '60.6', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>60.6</b>: LEFT<br><div style='width:200px'>Left on Gregory Blvd.</div>", mouseoverText: '60.6 LEFT: Gregory Blvd'  }, 
+        { latLngString: '41.102710, -73.402700', size: MARKER_SMALL, labelString: '60.6', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>60.6</b>: RIGHT<br><div style='width:200px'>Right on Emerson St.</div>", mouseoverText: '60.6 RIGHT: Emerson St'  }, 
+        { latLngString: '41.104000, -73.398140', size: MARKER_SMALL, labelString: '60.8', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>60.8</b>: LEFT<br><div style='width:200px'>Left on Villaway Rd.</div>", mouseoverText: '60.8 LEFT: Villaway Rd'  }, 
+        { latLngString: '41.105330, -73.398750', size: MARKER_SMALL, labelString: '61.0', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>61.0</b>: RIGHT<br><div style='width:200px'>Right on Winfield St / CT Route 136. Road name will turn into Saugatuck Ave</div>", mouseoverText: '61.0 RIGHT: Winfield St'  }, 
+        { latLngString: '41.117610, -73.375110', size: MARKER_SMALL, labelString: '62.6', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>62.6</b>: RIGHT<br><div style='width:200px'>Right on Ferry Ln.</div>", mouseoverText: '62.6 RIGHT: Ferry Ln'  }, 
+        { latLngString: '41.118290, -73.371850', size: MARKER_LARGE, labelString: '62.9', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>62.9</b><small> (GPS 41.1183, -73.3719)</small>: CHECKPOINT<br><div style='width:200px'>Left into Westport train station parking lot. CHECKPOINT 2: Donut Crazy Westport.</div>", mouseoverText: '62.9 CHECKPOINT: Donut Crazy Westport', majorLabel: '62'  }, 
+
+        { latLngString: '41.119280, -73.370360', size: MARKER_SMALL, labelString: '63.0', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>63.0</b>: RIGHT<br><div style='width:200px'>Right on Riverside Ave.</div>", mouseoverText: '63.0 RIGHT: Riverside Ave'  }, 
+        { latLngString: '41.122410, -73.370320', size: MARKER_SMALL, labelString: '63.3', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>63.3</b>: RIGHT<br><div style='width:200px'>Right on Bridge St.</div>", mouseoverText: '63.3 RIGHT: Bridge St'  }, 
+        { latLngString: '41.122070, -73.361170', size: MARKER_SMALL, labelString: '63.8', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>63.8</b>: STRAIGHT<br><div style='width:200px'>Continue straight as road becomes Green Farms Rd.</div>", mouseoverText: '63.8 STRAIGHT: Continue straight as road becomes Green Farms Rd.'  }, 
+        { latLngString: '41.121270, -73.320880', size: MARKER_LARGE, labelString: '66.2', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>66.2</b><small> (GPS 41.1213, -73.3209)</small>: RIGHT<br><div style='width:200px'>Bear Right at the fork to Beachside Ave.</div>", mouseoverText: '66.2 RIGHT: Beachside Ave'  }, 
+        { latLngString: '41.124770, -73.299150', size: MARKER_LARGE, labelString: '67.8', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>67.8</b><small> (GPS 41.1248, -73.2992)</small>: RIGHT<br><div style='width:200px'>Right on Pequot Ave.</div>", mouseoverText: '67.8 RIGHT: Pequot Ave'  }, 
+        { latLngString: '41.132900, -73.289210', size: MARKER_SMALL, labelString: '68.5', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>68.5</b>: RIGHT<br><div style='width:200px'>Right on Westway Rd.</div>", mouseoverText: '68.5 RIGHT: Westway Rd'  }, 
+        { latLngString: '41.132050, -73.284690', size: MARKER_SMALL, labelString: '68.8', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>68.8</b>: LEFT<br><div style='width:200px'>Left on Harbor Rd.</div>", mouseoverText: '68.8 LEFT: Harbor Rd'  }, 
+        { latLngString: '41.137710, -73.275730', size: MARKER_SMALL, labelString: '69.4', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>69.4</b>: RIGHT<br><div style='width:200px'>Bear Right to stay on Harbor Rd and cross bridge over Southport harbor.</div>", mouseoverText: '69.4 RIGHT: Cross bridge over Southport harbor'  }, 
+        { latLngString: '41.137880, -73.273210', size: MARKER_LARGE, labelString: '69.6', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>69.6</b><small> (GPS 41.1379, -73.2732)</small>: RIGHT<br><div style='width:200px'>Right on Sasco Hill Rd.</div>", mouseoverText: '69.6 RIGHT: Sasco Hill Rd'  }, 
+        { latLngString: '41.132930, -73.272920', size: MARKER_SMALL, labelString: '69.9', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>69.9</b>: LEFT<br><div style='width:200px'>Left on Oldfield Rd.</div>", mouseoverText: '69.9 LEFT:  Oldfield Rd'  }, 
+        { latLngString: '41.139960, -73.253230', size: MARKER_LARGE, labelString: '71.1', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>71.1</b><small> (GPS 41.1400, -73.2532)</small>: STRAIGHT<br><div style='width:200px'>Continue straight as road becomes Old Post Rd.</div>", mouseoverText: '71.1 STRAIGHT: Continue straight as road becomes Old Post Rd.', majorLabel: '71'  }, 
+        { latLngString: '41.149180, -73.243510', size: MARKER_LARGE, labelString: '72.0', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>72.0</b><small> (GPS 41.1492, -73.2435)</small>: RIGHT<br><div style='width:200px'>Right on Post Rd / CT Route 130.</div>", mouseoverText: '72.0 RIGHT: Post Rd'  }, 
+        { latLngString: '41.152960, -73.238110', size: MARKER_SMALL, labelString: '72.3', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>72.3</b>: LEFT<br><div style='width:200px'>Left on Grasmere Ave.</div>", mouseoverText: '72.3 LEFT: Grasmere Ave'  }, 
+        { latLngString: '41.154130, -73.239450', size: MARKER_SMALL, labelString: '72.4', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>72.4</b>: LEFT<br><div style='width:200px'>Right on Ash St</div>", mouseoverText: '72.4 LEFT: Ash St'  }, 
+        { latLngString: '41.154590, -73.238790', size: MARKER_SMALL, labelString: '72.5', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>72.5</b>: LEFT<br><div style='width:200px'>Left on Dalewood Ave.</div>", mouseoverText: '72.5 LEFT: Dalewood Ave'  }, 
+        { latLngString: '41.155270, -73.239550', size: MARKER_SMALL, labelString: '72.6', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>72.6</b>: RIGHT<br><div style='width:200px'>Right on Kenwood Ave.</div>", mouseoverText: '72.6 RIGHT: Kenwood Ave'  }, 
+        { latLngString: '41.157080, -73.237210', size: MARKER_LARGE, labelString: '72.7', pathStyle: 'TRAIL_UNPAVED', labelPosition: 'DEFAULT', labelDetails: "<b>72.7</b><small> (GPS 41.1571, -73.2372)</small>: STRAIGHT<br><div style='width:200px'>Enter Trail on Right at end of Kenwood Ave.</div>", mouseoverText: '72.7 STRAIGHT: Enter Trail on Right at end of Kenwood Ave.'  }, 
+        { latLngString: '41.160080, -73.231980', size: MARKER_LARGE, labelString: '73.2', pathStyle: 'TRAIL_UNPAVED', labelPosition: 'LEFT', labelDetails: "<b>73.2</b><small> (GPS 41.1601, -73.2320)</small>: RIGHT<br><div style='width:200px'>Exit with a Right on Ash Creek Blvd.</div>", mouseoverText: '73.2 RIGHT: Exit with a Right on Ash Creek Blvd.'  }, 
+        { latLngString: '41.160960, -73.230300', size: MARKER_SMALL, labelString: '73.3', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>73.3</b>: LEFT<br><div style='width:200px'>Left on Brewster St/Black Rock Turnpike.</div>", mouseoverText: '73.3 LEFT: Brewster St/Black Rock Turnpike'  }, 
+        { latLngString: '41.163640, -73.233180', size: MARKER_SMALL, labelString: '73.6', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>73.6</b>: RIGHT<br><div style='width:200px'>Right on Commerce Dr.</div>", mouseoverText: '73.6 RIGHT: Commerce Dr'  }, 
+        { latLngString: '41.166770, -73.228020', size: MARKER_SMALL, labelString: '73.9', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>73.9</b>: LEFT<br><div style='width:200px'>Left on Brentwood Ave.</div>", mouseoverText: '73.9 LEFT: Brentwood Ave'  }, 
+        { latLngString: '41.169390, -73.230700', size: MARKER_LARGE, labelString: '74.1', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>74.1</b><small> (GPS 41.1694, -73.2307)</small>: RIGHT<br><div style='width:200px'>Right on Kings Highway (Route 1). Cross and run on NORTH side (against traffic) for safer sidewalks.</div>", mouseoverText: '74.1 RIGHT: Kings Highway (run against traffic)'  }, 
+        { latLngString: '41.179074, -73.214810', size: MARKER_SMALL, labelString: '75.3', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>75.3</b>: RIGHT<br><div style='width:200px'>Right on Clinton Ave.</div>", mouseoverText: '75.3 RIGHT: Clinton Ave'  }, 
+        { latLngString: '41.173830, -73.208970', size: MARKER_LARGE, labelString: '75.7', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>75.7</b><small> (GPS 41.1738, -73.2090)</small>: LEFT<br><div style='width:200px'>Left on Fairfield Ave / CT Route 130. Stay on NORTH side of street (against traffic) for safer sidewalks.</div>", mouseoverText: '75.7 LEFT: Fairfield Ave (left side)'  }, 
+        { latLngString: '41.179612, -73.187609', size: MARKER_SMALL, labelString: '76.9', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>76.9</b>: STRAIGHT<br><div style='width:200px'>Cross Bridge onto Stratford Ave. Stay on left side of street.</div>", mouseoverText: '76.9 STRAIGHT: Cross Bridge onto Stratford Ave'  }, 
+        { latLngString: '41.176984, -73.178165', size: MARKER_LARGE, labelString: '77.4', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>77.4</b><small> (GPS 41.1770, -73.1782)</small>: STRAIGHT<br><div style='width:200px'>Continue straight passing Bass Pro Shops on the left.</div>", mouseoverText: '77.4 STRAIGHT: Passing Bass Pro Shops'  }, 
+        { latLngString: '41.177248, -73.173860', size: MARKER_SMALL, labelString: '77.7', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>77.7</b>: STRAIGHT<br><div style='width:200px'>Straight onto Connecticut Ave. Stay on left side of street for safer sidewalks.</div>", mouseoverText: '77.7 STRAIGHT: Straight onto Connecticut Ave (left side)'  }, 
+        { latLngString: '41.183870, -73.154200', size: MARKER_SMALL, labelString: '78.9', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>78.9</b>: STRAIGHT<br><div style='width:200px'>Merge onto Stratford Ave. Optionally, switch to right side of street for better sidewalks.</div>", mouseoverText: '78.9 STRAIGHT: Merge onto Stratford Ave'  }, 
+        { latLngString: '41.185570, -73.141835', size: MARKER_LARGE, labelString: '79.5', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>79.5</b><small> (GPS 41.1856, -73.1418)</small>: CHECKPOINT<br><div style='width:200px'>Left into Two Roads Brewery parking lot. Checkpoint #3</div>", mouseoverText: '79.5 CHECKPOINT: Two Roads Brewery', majorLabel: '79'  }, 
+
+        { latLngString: '41.186790, -73.127830', size: MARKER_SMALL, labelString: '80.3', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>80.3</b>: LEFT<br><div style='width:200px'>Bear Left at Fork on Ferry Blvd / CT Route 130.</div>", mouseoverText: '80.3 LEFT: Bear Left at Fork on Ferry Blvd / CT Route 130.'  }, 
+        { latLngString: '41.198142, -73.118076', size: MARKER_SMALL, labelString: '81.3', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>81.3</b>: STRAIGHT<br><div style='width:200px'>Continue straight as road name becomes Barnum Ave at Sunoco station. Stay on RIGHT sidewalk</div>", mouseoverText: '81.3 STRAIGHT: Road name becomes Barnum Ave'  }, 
+        { latLngString: '41.200593, -73.112544', size: MARKER_SMALL, labelString: '81.6', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>81.6</b>: STRAIGHT<br><div style='width:200px'>Cross bridge on Bridgeport Ave / US Route 1. Stay on RIGHT sidewalk.</div>", mouseoverText: '81.6 STRAIGHT: Cross bridge on Bridgeport Ave (right sidewalk)'  }, 
+        { latLngString: '41.202160, -73.102100', size: MARKER_LARGE, labelString: '82.2', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>82.2</b><small> (GPS 41.2022, -73.1021)</small>: RIGHT<br><div style='width:200px'>Right on Naugatuck Ave.</div>", mouseoverText: '82.2 RIGHT: Naugatuck Ave'  }, 
+        { latLngString: '41.193280, -73.083460', size: MARKER_SMALL, labelString: '83.5', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>83.5</b>: LEFT<br><div style='width:200px'>Left on E Broadway.</div>", mouseoverText: '83.5 LEFT: E Broadway'  }, 
+        { latLngString: '41.195510, -73.080710', size: MARKER_LARGE, labelString: '83.7', pathStyle: 'TRAIL_PAVED', labelPosition: 'ABOVE', labelDetails: "<b>83.7</b><small> (GPS 41.1955, -73.0807)</small>: RIGHT<br><div style='width:200px'>Right onto Walnut Beach Boardwalk.</div>", mouseoverText: '83.7 RIGHT: Walnut Beach Boardwalk'  }, 
+        { latLngString: '41.200452, -73.065088', size: MARKER_SMALL, labelString: '84.7', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>84.7</b>: STRAIGHT<br><div style='width:200px'>Exit onto E Broadway.</div>", mouseoverText: '84.7 STRAIGHT: Exit onto E Broadway.'  }, 
+        { latLngString: '41.201717, -73.064406', size: MARKER_LARGE, labelString: '84.8', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>84.8</b><small> (GPS 41.2017, -73.0644)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on E Broadway passing Greek Spot Cafe.</div>", mouseoverText: '84.8 STRAIGHT: Passing Greek Spot Cafe'  }, 
+        { latLngString: '41.209890, -73.056830', size: MARKER_SMALL, labelString: '85.5', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>85.5</b>: LEFT<br><div style='width:200px'>Left on Seaside Ave.</div>", mouseoverText: '85.5 LEFT: Seaside Ave'  }, 
+        { latLngString: '41.211860, -73.059380', size: MARKER_SMALL, labelString: '85.7', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>85.7</b>: RIGHT<br><div style='width:200px'>Right on Kinlock St.</div>", mouseoverText: '85.7 RIGHT: Kinlock St'  }, 
+        { latLngString: '41.213220, -73.057550', size: MARKER_SMALL, labelString: '85.8', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>85.8</b>: LEFT<br><div style='width:200px'>Left on Rogers Ave. Road name will turn into Lafayette Ave in a few blocks</div>", mouseoverText: '85.8 LEFT: Rogers Ave'  }, 
+        { latLngString: '41.219400, -73.062230', size: MARKER_LARGE, labelString: '86.3', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>86.3</b><small> (GPS 41.2194, -73.0622)</small>: RIGHT<br><div style='width:200px'>Right on South Broad St.</div>", mouseoverText: '86.3 RIGHT: South Broad St'  }, 
+        { latLngString: '41.222370, -73.056690', size: MARKER_SMALL, labelString: '86.7', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>86.7</b>: RIGHT<br><div style='width:200px'>Right on Factory Lane</div>", mouseoverText: '86.7 RIGHT: Factory Lane'  }, 
+        { latLngString: '41.221610, -73.055670', size: MARKER_SMALL, labelString: '86.7', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>86.7</b>: LEFT<br><div style='width:200px'>Left to cross Foot Bridge.</div>", mouseoverText: '86.7 LEFT: Left to cross Foot Bridge.'  }, 
+        { latLngString: '41.221850, -73.054980', size: MARKER_LARGE, labelString: '86.8', pathStyle: 'TRAIL_PAVED', labelPosition: 'RIGHT', labelDetails: "<b>86.8</b><small> (GPS 41.2219, -73.0550)</small>: RIGHT<br><div style='width:200px'>Right on Shipyard Ln. Road name will turn into Elton St after Harborside Dr</div>", mouseoverText: '86.8 RIGHT: Shipyard Ln'  }, 
+        { latLngString: '41.221170, -73.049660', size: MARKER_SMALL, labelString: '87.1', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>87.1</b>: RIGHT<br><div style='width:200px'>Right on Gulf St.</div>", mouseoverText: '87.1 RIGHT: Gulf St'  }, 
+        { latLngString: '41.209300, -73.044410', size: MARKER_LARGE, labelString: '88.0', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>88.0</b><small> (GPS 41.2093, -73.0444)</small>: STRAIGHT<br><div style='width:200px'>Straight on Gulf St passing Goodies Restaurant. Road name becomes Welch\'s Point soon.</div>", mouseoverText: '88.0 STRAIGHT: Passing Goodies Restaurant'  }, 
+        { latLngString: '41.208830, -73.034330', size: MARKER_SMALL, labelString: '88.7', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>88.7</b>: RIGHT<br><div style='width:200px'>Right on Odell Ave.</div>", mouseoverText: '88.7 RIGHT: Odell Ave'  }, 
+        { latLngString: '41.207560, -73.032330', size: MARKER_SMALL, labelString: '88.9', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>88.9</b>: LEFT<br><div style='width:200px'>Left on Bayshore Dr/Melba St.</div>", mouseoverText: '88.9 LEFT: Bayshore Dr/Melba St'  }, 
+        { latLngString: '41.208151, -73.025286', size: MARKER_LARGE, labelString: '89.2', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>89.2</b><small> (GPS 41.2082, -73.0253)</small>: STRAIGHT<br><div style='width:200px'>Straight on Melba St passing Beachcomber Cafe.</div>", mouseoverText: '89.2 STRAIGHT: Passing Beachcomber Cafe'  }, 
+        { latLngString: '41.228490, -72.997330', size: MARKER_LARGE, labelString: '91.5', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>91.5</b><small> (GPS 41.2285, -72.9973)</small>: RIGHT<br><div style='width:200px'>Right on New Haven Ave / CT Route 106.</div>", mouseoverText: '91.5 RIGHT: New Haven Ave', majorLabel: '91'  }, 
+        { latLngString: '41.236130, -72.986260', size: MARKER_SMALL, labelString: '92.3', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>92.3</b>: RIGHT<br><div style='width:200px'>Right on Ocean Ave.</div>", mouseoverText: '92.3 RIGHT: Ocean Ave'  }, 
+        { latLngString: '41.253540, -72.959580', size: MARKER_LARGE, labelString: '94.3', pathStyle: 'TRAIL_PAVED', labelPosition: 'ABOVE', labelDetails: "<b>94.3</b><small> (GPS 41.2535, -72.9596)</small>: RIGHT<br><div style='width:200px'>Right on Savin Rock Trail.</div>", mouseoverText: '94.3 RIGHT: Savin Rock Trail'  }, 
+        { latLngString: '41.258530, -72.942210', size: MARKER_SMALL, labelString: '95.4', pathStyle: 'TRAIL_PAVED', labelPosition: 'BELOW', labelDetails: "<b>95.4</b>: STRAIGHT<br><div style='width:200px'>Straight on Beach St.</div>", mouseoverText: '95.4 STRAIGHT: Straight on Beach St.'  }, 
+        { latLngString: '41.264530, -72.931800', size: MARKER_SMALL, labelString: '96.1', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>96.1</b>: RIGHT<br><div style='width:200px'>Right at the fork onto 1st Ave / CT Route 122.</div>", mouseoverText: '96.1 RIGHT: 1st Ave / CT Route 122'  }, 
+        { latLngString: '41.279030, -72.941910', size: MARKER_LARGE, labelString: '97.3', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>97.3</b><small> (GPS 41.2790, -72.9419)</small>: STRAIGHT<br><div style='width:200px'>Continue straight on 1st Ave passing Rite Aid at Elm St.</div>", mouseoverText: '97.3 STRAIGHT: Passing Rite Aid at Elm St'  }, 
+        { latLngString: '41.289310, -72.958970', size: MARKER_LARGE, labelString: '98.4', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>98.4</b><small> (GPS 41.2893, -72.9590)</small>: RIGHT<br><div style='width:200px'>Right on Campbell Ave.</div>", mouseoverText: '98.4 RIGHT: Campbell Ave'  }, 
+        { latLngString: '41.307685, -72.969345', size: MARKER_SMALL, labelString: '99.9', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>99.9</b>: RIGHT<br><div style='width:200px'>Right on Derby Ave / CT Route 34. Stay on left side of street for best sidewalks.</div>", mouseoverText: '99.9 RIGHT: Derby Ave (stay on left side of street)'  }, 
+        { latLngString: '41.309436, -72.964029', size: MARKER_SMALL, labelString: '100.2', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>100.2</b>: LEFT<br><div style='width:200px'>Left on Central Ave.</div>", mouseoverText: '100.2 LEFT: Central Ave'  }, 
+        { latLngString: '41.315570, -72.963510', size: MARKER_SMALL, labelString: '100.6', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>100.6</b>: RIGHT<br><div style='width:200px'>Right on Chapel St.</div>", mouseoverText: '100.6 RIGHT: Chapel St'  }, 
+        { latLngString: '41.307290, -72.928690', size: MARKER_LARGE, labelString: '102.5', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>102.5</b><small> (GPS 41.3073, -72.9287)</small>: END<br><div style='width:200px'>End at College St.</div>", mouseoverText: '102.5 END: End at College St.', majorLabel: '102'  }, 
+      ];
+}
+
+
+function createThreeMarkerArrays(markerConfigs, map) {
+    var majorMarkers = [];
+    var allLargeMarkers = [];
+    var allSmallMarkers = [];
+
+    for (var i=0; i<markerConfigs.length; i++) {
+        var thisMarkerConfig = markerConfigs[i];
+        if (!thisMarkerConfig) { // make sure it's defined
+            continue;
+        }
+
+        var thisLatLngArray = thisMarkerConfig.latLngString.split(',');
+        var thisIcon = (thisMarkerConfig.size === MARKER_LARGE) ? Config.ICON["DIAMOND"].large : Config.ICON["CIRCLE"].medium;
+        var thisPathStyle = Config.PATHSTYLE[thisMarkerConfig.pathStyle];
+
+        // Font size: for visible markers (vast majority), MARKER_LARGE --> LABELFONT.large; MARKER_SMALL --> LABELFONT.medium.
+        // But for invisible markers, MARKER_LARGE --> font medium; MARKER_SMALL --> font small
+        var thisFontSize = Config.LABELFONT.medium; // default
+        if (thisMarkerConfig.size === MARKER_LARGE) {
+            thisFontSize = (thisPathStyle !== Config.PATHSTYLE.INVISIBLE && thisMarkerConfig.labelString.length < 5) 
+		? Config.LABELFONT.large : Config.LABELFONT.medium;
+        } else {
+            thisFontSize = (thisPathStyle !== Config.PATHSTYLE.INVISIBLE && thisMarkerConfig.labelString.length < 6) 
+		? Config.LABELFONT.medium : Config.LABELFONT.small;
+        }
+
+        var markerOptions = {
+            position : new google.maps.LatLng(thisLatLngArray[0], thisLatLngArray[1]),
+            icon : colorIcon(thisIcon, thisPathStyle.foregroundColor),
+            strokeOpacity : thisPathStyle.markerStrokeOpacity || Config.OPACITY["MARKERSTROKE"],
+            labelContent : thisMarkerConfig.labelString,
+            labelPosition : thisMarkerConfig.labelPosition,
+            labelStyle : { 
+                color : thisPathStyle.labelColor,
+                fontSize : thisFontSize,
+                opacity : Config.OPACITY["LABEL"]
+            },
+            mouseoverText : thisMarkerConfig.mouseoverText,
+            infowindowText : thisMarkerConfig.labelDetails
+          };
+
+        var marker = getLabeledMarker(markerOptions, map);
+
+        if (thisMarkerConfig.size === MARKER_LARGE) {
+            allLargeMarkers.push(marker);
+        } else {
+            allSmallMarkers.push(marker);
+        }
+
+        // Large markers get a shadow set that is shown at lower-resolution zooms.
+
+        if (thisMarkerConfig.size === MARKER_LARGE) {
+
+            var thisMajorLabel = thisMarkerConfig.majorLabel || '';
+            var thisMajorIcon = (thisMajorLabel !== '') ? colorIcon(Config.ICON["DIAMOND"].medium, Colors.DARK_GREY)  : 
+                  colorIcon(Config.ICON["DIAMOND"].small, thisPathStyle.foregroundColor);
+            var thisMajorMarkerOptions = {
+                position : new google.maps.LatLng(thisLatLngArray[0], thisLatLngArray[1]),
+                icon : thisMajorIcon,
+                strokeOpacity : thisPathStyle.markerStrokeOpacity || Config.OPACITY["MARKERSTROKE"],
+                labelContent : thisMajorLabel,
+                labelPosition : thisMarkerConfig.labelPosition,
+                labelStyle : { 
+                    color : Colors.DARK_RED,
+                    fontSize : Config.LABELFONT.medium,
+                    opacity : Config.OPACITY["LABEL"]
+                },
+                mouseoverText : thisMarkerConfig.mouseoverText,
+                infowindowText : thisMarkerConfig.labelDetails
+              };
+
+            majorMarkers.push(getLabeledMarker(thisMajorMarkerOptions, map));
+        }
+
+    }
+
+    return {
+        majorMarkers : majorMarkers,
+        allLargeMarkers : allLargeMarkers,
+        allSmallMarkers : allSmallMarkers
+      };
+
+}
+
+
+function getBathroomMarkerConfigs() {
+    // Paste configuration data inside the returned array.
+    return [
+        { latLngString: '40.714002, -73.933852', labelDetails: 'BP Gas Station / Convenience Store (Metropolitan Ave just past Morgan Ave)', mouseoverText: 'Gas' }, 
+        { latLngString: '40.698639, -73.903945', labelDetails: 'Shell Gas Station (Cypress Ave at Weirfield St)', mouseoverText: 'Gas' }, 
+      ];
+}
+
+function createBathroomMarkerArrays(markerConfigs, map) {
+  var bathroomMarkers = [];
+
+  for (var i=0; i<markerConfigs.length; i++) {
+      var thisMarkerConfig = markerConfigs[i];
+      if (!thisMarkerConfig) { // make sure it's defined
+          continue;
+      }
+
+      var thisLatLngArray = thisMarkerConfig.latLngString.split(',');
+      var thisIcon = Config.ICON["WEDGE_UP"].medium;
+      var thisColor = Colors.MEDIUM_PURPLE;
+      var thisFontSize = Config.LABELFONT.small;
+
+      var markerOptions = {
+          position : new google.maps.LatLng(thisLatLngArray[0], thisLatLngArray[1]),
+          icon : colorIcon(thisIcon, thisColor),
+          strokeOpacity : Config.OPACITY["MARKERSTROKE"],
+          labelContent : 'M|W',
+          labelPosition : 'DEEP_BELOW',
+          labelStyle : { 
+              color : thisColor,
+              fontSize : thisFontSize,
+              opacity : Config.OPACITY["LABEL"]
+          },
+          mouseoverText : 'Bathroom', // thisMarkerConfig.mouseoverText,
+          infowindowText : '<b>Bathroom:</b> ' + thisMarkerConfig.labelDetails
+        };
+
+      var marker = getLabeledMarker(markerOptions, map);
+
+      bathroomMarkers.push(marker);
+  }
+
+  return bathroomMarkers;
+}
+
+
+function showOrHideElements(currentZoom) {
+    var markerArrays = activeState.markerArrays;
+
+    // iterate over markers and call setVisible
+    for (var i = 0; i < markerArrays.allSmallMarkers.length; i++) { 
+        markerArrays.allSmallMarkers[i].setVisible(currentZoom >= Config.ZOOMDISPLAY["SMALLMARKERS"]-1);
+        markerArrays.allSmallMarkers[i].set("labelVisible", currentZoom >= Config.ZOOMDISPLAY["SMALLMARKERS"]);
+    }
+
+    for (var i = 0; i < markerArrays.allLargeMarkers.length; i++) {
+        markerArrays.allLargeMarkers[i].setVisible(currentZoom >= Config.ZOOMDISPLAY["NONMAJORMARKERS"]);
+    }
+
+    for (var i = 0; i < markerArrays.majorMarkers.length; i++) {
+        if (currentZoom < Config.ZOOMDISPLAY["NONMAJORMARKERS"]-3) {
+            var thisLabelContent = markerArrays.majorMarkers[i].get("labelContent");
+            if (thisLabelContent === '') {
+                markerArrays.majorMarkers[i].setVisible(false);
+            } else {
+                markerArrays.majorMarkers[i].set("labelVisible", false);
+            }
+        } else if (currentZoom < Config.ZOOMDISPLAY["NONMAJORMARKERS"]) {
+            markerArrays.majorMarkers[i].setVisible(true);
+            markerArrays.majorMarkers[i].set("labelVisible", true);
+        } else {
+            markerArrays.majorMarkers[i].setVisible(false);
+        }
+    }
+
+    for (var i = 0; i < markerArrays.bathroomMarkers.length; i++) { 
+        markerArrays.bathroomMarkers[i].setVisible(activeState.showBathrooms && currentZoom >= Config.ZOOMDISPLAY["SPECIALMARKERS"]-1);
+        markerArrays.bathroomMarkers[i].set("labelVisible", activeState.showBathrooms && currentZoom >= Config.ZOOMDISPLAY["SPECIALMARKERS"]);
+    }
+
+    for (var i = 0; i < activeState.vanRoutes.length; i++) {
+        activeState.vanRoutes[i].setVisible(activeState.showVanRoutes && currentZoom >= Config.ZOOMDISPLAY["SPECIALMARKERS"]-1);
+    }
+
+}
+
+
+function createLabelLayer(map) {
+    // The following variables are temporary just to know what we're talking about.
+
+    var markerConfigs = getMarkerConfigs();
+
+    var markerArrays = createThreeMarkerArrays(markerConfigs, map); // returns an object with three elements, each an array of markers
+
+    markerArrays.bathroomMarkers = createBathroomMarkerArrays(getBathroomMarkerConfigs(), map); // adds an array of bathroom markers
+
+    activeState.markerArrays = markerArrays;
+
+    google.maps.event.addListener(map, 'zoom_changed', 
+      function() {
+	  showOrHideElements(map.getZoom());
+      });
+
+    showOrHideElements(map.getZoom());
+}
+
+
+function getSegmentConfigs() {
+    // Paste segment configurations into the return [ ] array
+
+    return [
+        {
+          title: 'McCarren Park Brooklyn to Triboro Bridge Pedestrian Path', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.950620,40.721720,0.0 -73.949860,40.722230,0.0 -73.953620,40.728830,0.0 -73.954200,40.730170,0.0 -73.951610,40.730410,0.0 -73.951950,40.731420,0.0 -73.952510,40.734460,0.0 -73.952690,40.734710,0.0 -73.952810,40.735460,0.0 -73.953140,40.737930,0.0 -73.951610,40.742720,0.0 -73.951770,40.742910,0.0 -73.951480,40.743040,0.0 -73.951340,40.743620,0.0 -73.953610,40.744070,0.0 -73.953680,40.744140,0.0 -73.952240,40.748610,0.0 -73.952270,40.750900,0.0 -73.948070,40.755780,0.0 -73.944120,40.759390,0.0 -73.939710,40.766470,0.0 -73.936000,40.767800,0.0 -73.935790,40.769090,0.0 -73.934650,40.770210,0.0 -73.933930,40.771900,0.0 -73.933620,40.772020,0.0 -73.933150,40.772060,0.0 -73.932820,40.772410,0.0 -73.931870,40.774180,0.0 -73.929930,40.773570,0.0 -73.928720,40.775850,0.0 -73.927860,40.776750,0.0 -73.924030,40.774650,0.0 -73.923860,40.774590,0.0 -73.922070,40.773530,0.0 -73.921460,40.773100,0.0 -73.921020,40.773440,0.0 -73.919550,40.772390,0.0'.split(' ') 
+        }, { 
+          title: 'Crossing over Triboro Bridge (NO VAN ACCESS)', 
+          segmentType: 'ROAD_NOVANACCESS', 
+          pointsAsKMLStrings: '-73.919550,40.772390,0.0 -73.919580,40.772340,0.0 -73.919520,40.772270,0.0 -73.920450,40.772910,0.0 -73.922360,40.774380,0.0 -73.923790,40.776110,0.0 -73.929460,40.783640,0.0 -73.929770,40.784400,0.0 -73.929790,40.785400,0.0 -73.929460,40.786220,0.0 -73.928000,40.787940,0.0'.split(' ') 
+        }, { 
+          title: 'On Ward\'s Island roadway', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.928000,40.787940,0.0 -73.927772,40.788078,0.0 -73.926608,40.789427,0.0 -73.925920,40.789980,0.0 -73.925830,40.790050,0.0'.split(' ') 
+        }, { 
+          title: 'Running trail and Ward\'s Island bridge', 
+          segmentType: 'TRAIL_PAVED', 
+          pointsAsKMLStrings: '-73.925830,40.790050,0.0 -73.926290,40.790470,0.0 -73.926960,40.790680,0.0 -73.928120,40.790720,0.0 -73.929440,40.791170,0.0 -73.930060,40.791030,0.0 -73.931120,40.790400,0.0 -73.931240,40.790390,0.0 -73.932360,40.789250,0.0 -73.933840,40.787590,0.0 -73.934050,40.787200,0.0 -73.934980,40.786180,0.0 -73.935040,40.785640,0.0 -73.935250,40.785210,0.0 -73.938620,40.786750,0.0 -73.938980,40.786310,0.0 -73.939350,40.786470,0.0 -73.939100,40.786760,0.0 -73.939110,40.786730,0.0 -73.939340,40.786450,0.0 -73.939320,40.786400,0.0 -73.939560,40.786150,0.0'.split(' ') 
+        }, { 
+          title: 'First Ave in Manhattan', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.939560,40.786150,0.0 -73.941942,40.787127,0.0 -73.939110,40.791023,0.0 -73.931926,40.800948,0.0 -73.931240,40.801740,0.0'.split(' ') 
+        }, { 
+          title: 'Willis Ave Bridge', 
+          segmentType: 'ROAD_NOVANACCESS', 
+          pointsAsKMLStrings: '-73.931240,40.801740,0.0 -73.930780,40.802470,0.0 -73.930070,40.802990,0.0 -73.926040,40.805090,0.0 -73.925430,40.805810,0.0 -73.924570,40.807060,0.0 -73.924430,40.807220,0.0 '.split(' ') 
+        }, { 
+          title: 'Bronx and Upper Manhattan streets', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.924430,40.807220,0.0 -73.922980,40.809210,0.0 -73.927100,40.810960,0.0 -73.929800,40.813150,0.0 -73.930950,40.813660,0.0 -73.930560,40.814680,0.0 -73.930539,40.815583,0.0 -73.928780,40.820050,0.0 -73.928101,40.821846,0.0 -73.927700,40.822930,0.0 -73.925090,40.827350,0.0 -73.927070,40.827950,0.0 -73.929050,40.829110,0.0 -73.929683,40.828774,0.0 -73.930690,40.828490,0.0 -73.930810,40.828560,0.0 -73.931100,40.828440,0.0 -73.931808,40.828311,0.0 -73.934560,40.828130,0.0 -73.939930,40.830380,0.0 -73.940323,40.830516,0.0 -73.940350,40.831188,0.0 -73.940286,40.831700,0.0 -73.940040,40.832050,0.0 -73.939624,40.832754,0.0 -73.939350,40.833060,0.0 -73.938460,40.833844,0.0 -73.937920,40.834370,0.0 -73.936690,40.837090,0.0'.split(' ') 
+        }, { 
+          title: 'Highbridge Park', 
+          segmentType: 'TRAIL_PAVED', 
+          pointsAsKMLStrings: '-73.936690,40.837090,0.0 -73.936460,40.837030,0.0 -73.936260,40.837200,0.0 -73.935970,40.837330,0.0 -73.935960,40.837850,0.0 -73.934020,40.839970,0.0 -73.933600,40.840910,0.0 -73.933170,40.841350,0.0 -73.931850,40.842480,0.0 -73.926730,40.841990,0.0 -73.926740,40.841710,0.0 -73.926600,40.841700,0.0'.split(' ') 
+        }, { 
+          title: 'Grand Concourse and Fordham Rd', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.926600,40.841700,0.0 -73.926250,40.842115,0.0 -73.922232,40.840384,0.0 -73.921080,40.840320,0.0 -73.919960,40.840860,0.0 -73.919690,40.840900,0.0 -73.917690,40.840310,0.0 -73.915370,40.839360,0.0 -73.915000,40.839340,0.0 -73.913440,40.838781,0.0 -73.912401,40.840908,0.0 -73.911274,40.844398,0.0 -73.910897,40.844997,0.0 -73.910384,40.845490,0.0 -73.907412,40.847610,0.0 -73.905974,40.849010,0.0 -73.905321,40.849925,0.0 -73.901075,40.855210,0.0 -73.899739,40.857312,0.0 -73.898087,40.860233,0.0 -73.896840,40.862500,0.0 -73.893820,40.861990,0.0 -73.892780,40.861880,0.0 -73.891810,40.861970,0.0 -73.891250,40.861750,0.0 -73.884950,40.858480,0.0 -73.884180,40.858260,0.0 -73.883280,40.858170,0.0 -73.881970,40.857860,0.0 -73.881190,40.857770,0.0 -73.879200,40.856490,0.0 -73.878690,40.856040,0.0 -73.877460,40.855540,0.0 -73.876773,40.855538,0.0 -73.875820,40.855710,0.0 -73.870590,40.856900,0.0 -73.870590,40.857020,0.0 -73.870360,40.857110,0.0 -73.868940,40.857340,0.0 -73.861800,40.857500,0.0 -73.861180,40.857570,0.0 -73.856480,40.857630,0.0 -73.853070,40.857930,0.0 -73.849110,40.858220,0.0 -73.846410,40.858160,0.0 -73.843491,40.857836,0.0 -73.841490,40.857540,0.0 -73.836920,40.856870,0.0 -73.836850,40.856540,0.0'.split(' ') 
+        }, { 
+          title: 'Bike path in Pelham Park', 
+          segmentType: 'TRAIL_PAVED', 
+          pointsAsKMLStrings: '-73.836850,40.856540,0.0 -73.834900,40.856250,0.0 -73.834720,40.856100,0.0 -73.834470,40.856150,0.0 -73.833980,40.856040,0.0 -73.833910,40.855910,0.0 -73.833340,40.855920,0.0 -73.832740,40.855840,0.0 -73.832350,40.855720,0.0 -73.832240,40.855710,0.0 -73.832200,40.855770,0.0 -73.832260,40.855800,0.0 -73.832200,40.855820,0.0 -73.831490,40.855640,0.0 -73.830330,40.855700,0.0 -73.830150,40.855660,0.0 -73.829200,40.855950,0.0 -73.828560,40.856050,0.0 -73.828170,40.856000,0.0 -73.827830,40.856070,0.0 -73.827630,40.856020,0.0 -73.826730,40.856310,0.0 -73.826210,40.856390,0.0 -73.825890,40.856360,0.0 -73.825330,40.856110,0.0 -73.824500,40.856040,0.0 -73.822290,40.856100,0.0 -73.821950,40.856130,0.0'.split(' ') 
+        }, { 
+          title: 'Shore Road in Pelham Park', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.821950,40.856130,0.0 -73.821720,40.855950,0.0 -73.817910,40.859320,0.0 -73.816960,40.860310,0.0 -73.814440,40.863880,0.0 -73.814010,40.864260,0.0 -73.813660,40.864400,0.0 -73.813530,40.864690,0.0 -73.814030,40.864870,0.0 -73.811730,40.869050,0.0 -73.811460,40.870030,0.0 -73.811510,40.870260,0.0 -73.811140,40.870720,0.0 -73.810520,40.871060,0.0 -73.809110,40.872970,0.0 -73.807990,40.873530,0.0 -73.806080,40.874000,0.0 -73.802460,40.875630,0.0 -73.799030,40.876660,0.0 -73.797430,40.877240,0.0 -73.795970,40.878920,0.0 -73.795900,40.879320,0.0 -73.796010,40.881110,0.0'.split(' ') 
+        }, { 
+          title: 'Paved path in Pelham Park', 
+          segmentType: 'TRAIL_PAVED', 
+          pointsAsKMLStrings: '-73.796010,40.881110,0.0 -73.795720,40.881700,0.0 -73.795790,40.882440,0.0 -73.796470,40.882860,0.0 -73.797190,40.883090,0.0 -73.797300,40.883210,0.0 -73.797430,40.884070,0.0'.split(' ') 
+        }, { 
+          title: 'Suburban streets in Pelham, NY', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.797430,40.884070,0.0 -73.797330,40.884390,0.0 -73.797640,40.885280,0.0 -73.798220,40.886220,0.0 -73.798830,40.886880,0.0 -73.798900,40.887450,0.0 -73.798630,40.887680,0.0 -73.798530,40.888190,0.0 -73.798560,40.889260,0.0 -73.798900,40.889890,0.0 -73.799480,40.890090,0.0 -73.799660,40.890270,0.0 -73.799710,40.890540,0.0 -73.800900,40.891290,0.0 -73.806140,40.896470,0.0 -73.810240,40.902180,0.0 -73.811390,40.902240,0.0 -73.813650,40.902740,0.0 -73.811280,40.906830,0.0 -73.811330,40.907960,0.0 -73.811100,40.908730,0.0 -73.810381,40.910077,0.0 -73.809750,40.911090,0.0 -73.806730,40.917170,0.0 -73.803920,40.921250,0.0 -73.803870,40.921510,0.0 -73.804550,40.924840,0.0 -73.804980,40.926110,0.0 -73.805079,40.926742,0.0 -73.804838,40.926965,0.0 -73.804569,40.927403,0.0 -73.804140,40.927877,0.0 -73.803520,40.928110,0.0 -73.803070,40.928033,0.0'.split(' ') 
+        }, { 
+          title: 'Westchester Greenway segment', 
+          segmentType: 'TRAIL_UNPAVED', 
+          pointsAsKMLStrings: '-73.803070,40.928033,0.0 -73.802620,40.928530,0.0 -73.801510,40.928740,0.0 -73.800940,40.928120,0.0 -73.800150,40.928110,0.0 -73.799400,40.928310,0.0 -73.800120,40.930120,0.0 -73.798170,40.930600,0.0'.split(' ') 
+        }, { 
+          title: 'Suburban streets in New Rochelle', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.798170,40.930600,0.0 -73.796220,40.930850,0.0 -73.794890,40.930450,0.0 -73.794520,40.930430,0.0 -73.794940,40.931840,0.0 -73.794570,40.931840,0.0 -73.793160,40.932160,0.0 -73.792770,40.932440,0.0 -73.792210,40.933110,0.0 -73.791110,40.933020,0.0 -73.790890,40.933070,0.0 -73.790830,40.933420,0.0 -73.784290,40.936520,0.0 -73.781160,40.937950,0.0 -73.780840,40.938380,0.0 -73.780050,40.938780,0.0 -73.779900,40.938950,0.0 -73.779940,40.939630,0.0 -73.779620,40.940010,0.0 -73.779150,40.940090,0.0 -73.778540,40.940020,0.0'.split(' ') 
+        }, { 
+          title: 'Leatherstocking trail', 
+          segmentType: 'TRAIL_UNPAVED', 
+          pointsAsKMLStrings: '-73.778540,40.940020,0.0 -73.778190,40.940060,0.0 -73.777800,40.940330,0.0 -73.777530,40.940700,0.0 -73.777280,40.940860,0.0 -73.776120,40.940980,0.0 -73.775760,40.941310,0.0 -73.775760,40.941470,0.0 -73.776070,40.941910,0.0 -73.775980,40.942160,0.0 -73.775600,40.942410,0.0 -73.773860,40.942720,0.0 -73.773140,40.943000,0.0 -73.772940,40.943150,0.0 -73.771930,40.944600,0.0 -73.771830,40.944800,0.0 -73.771540,40.944950,0.0 -73.770850,40.946070,0.0 -73.770760,40.946590,0.0 -73.770220,40.947040,0.0 -73.769290,40.947320,0.0 -73.768550,40.947240,0.0 -73.768030,40.947270,0.0 -73.766290,40.946920,0.0 -73.765620,40.947040,0.0 -73.764850,40.947330,0.0 -73.764080,40.947380,0.0 -73.762070,40.948890,0.0 -73.761080,40.949770,0.0 -73.760570,40.950590,0.0 -73.760290,40.951200,0.0 -73.760020,40.951250,0.0 -73.759230,40.951180,0.0 -73.758390,40.951290,0.0 -73.757900,40.951180,0.0 -73.757720,40.951350,0.0 -73.757470,40.951260,0.0 -73.757130,40.950980,0.0 -73.756480,40.950800,0.0 -73.755830,40.950830,0.0 -73.754090,40.951560,0.0 -73.753550,40.951850,0.0 -73.751970,40.952190,0.0 -73.751530,40.952560,0.0 -73.751100,40.952680,0.0 -73.750850,40.952860,0.0 -73.750470,40.952930,0.0 -73.750240,40.953080,0.0 -73.749430,40.954400,0.0 -73.749390,40.954740,0.0 -73.748940,40.955090,0.0 -73.748620,40.955460,0.0 -73.748110,40.955610,0.0 -73.747960,40.955760,0.0 -73.747700,40.955820,0.0 -73.746850,40.956680,0.0 -73.746080,40.956950,0.0 -73.745720,40.956910,0.0 -73.744360,40.957140,0.0 -73.744120,40.957250,0.0 -73.743780,40.957530,0.0 -73.743170,40.957760,0.0 -73.743150,40.958010,0.0 -73.742810,40.958450,0.0 -73.741390,40.958930,0.0'.split(' ') 
+        }, { 
+          title: 'Suburban streets', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.741390,40.958930,0.0 -73.741190,40.959410,0.0 -73.741870,40.960360,0.0 -73.742090,40.960310,0.0 -73.742680,40.959530,0.0 -73.743460,40.959380,0.0 -73.743580,40.959390,0.0 -73.743400,40.959750,0.0 -73.743560,40.959910,0.0 -73.744730,40.960170,0.0 -73.744930,40.960140,0.0'.split(' ') 
+        }, { 
+          title: 'Saxon Woods trail', 
+          segmentType: 'TRAIL_UNPAVED', 
+          pointsAsKMLStrings: '-73.744930,40.960140,0.0 -73.744930,40.960410,0.0 -73.744150,40.961880,0.0 -73.744140,40.962130,0.0 -73.742840,40.962210,0.0 -73.742140,40.962050,0.0 -73.741850,40.962050,0.0 -73.741400,40.962260,0.0 -73.740770,40.963520,0.0 -73.741440,40.965060,0.0 -73.742110,40.965490,0.0 -73.742360,40.965790,0.0 -73.743560,40.966400,0.0 -73.743920,40.966400,0.0 -73.744300,40.966060,0.0 -73.744590,40.966070,0.0 -73.744780,40.966310,0.0 -73.744690,40.966650,0.0 -73.744230,40.966920,0.0 -73.744210,40.967320,0.0 -73.744030,40.968030,0.0 -73.744140,40.969270,0.0 -73.743960,40.970560,0.0 -73.744350,40.971530,0.0 -73.744570,40.974370,0.0 -73.744640,40.975850,0.0 -73.744570,40.976570,0.0 -73.744660,40.978400,0.0 -73.744640,40.978780,0.0 -73.744860,40.979410,0.0 -73.745070,40.979700,0.0 -73.745250,40.980730,0.0 -73.745200,40.982310,0.0 -73.745110,40.982600,0.0 -73.744190,40.983010,0.0'.split(' ') 
+        }, { 
+          title: 'Suburban streets in Harrison and Rye', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.744190,40.983010,0.0 -73.743970,40.981800,0.0 -73.742720,40.981930,0.0 -73.742270,40.981900,0.0 -73.741370,40.981580,0.0 -73.739930,40.980550,0.0 -73.739280,40.980300,0.0 -73.738000,40.980170,0.0 -73.736690,40.980420,0.0 -73.735220,40.980890,0.0 -73.731390,40.981010,0.0 -73.728150,40.980710,0.0 -73.724800,40.981130,0.0 -73.723840,40.981060,0.0 -73.713260,40.979090,0.0 -73.713910,40.977350,0.0 -73.713930,40.975760,0.0 -73.713395,40.972530,0.0 -73.712910,40.969930,0.0 -73.712735,40.968850,0.0 -73.707688,40.969827,0.0 -73.706210,40.969540,0.0 -73.705100,40.969040,0.0 -73.701160,40.966340,0.0 -73.699000,40.965000,0.0 -73.698260,40.964500,0.0 -73.696340,40.963870,0.0 -73.695130,40.963510,0.0 -73.692700,40.963000,0.0 -73.691350,40.962380,0.0 -73.689260,40.962440,0.0 -73.688750,40.962280,0.0 -73.687990,40.962200,0.0 -73.688480,40.960890,0.0 -73.680760,40.959440,0.0'.split(' ') 
+        }, { 
+          title: 'Rye town boardwalk', 
+          segmentType: 'TRAIL_PAVED', 
+          pointsAsKMLStrings: '-73.680760,40.959440,0.0 -73.680360,40.960580,0.0 -73.680150,40.960760,0.0 -73.679260,40.961140,0.0 -73.679120,40.961410,0.0 -73.678850,40.962660,0.0 -73.677260,40.964290,0.0 -73.676170,40.964710,0.0 -73.675520,40.964690,0.0 -73.675000,40.964530,0.0'.split(' ') 
+        }, { 
+          title: 'Rye, Greenwich, Stamford, Norwalk, Fairfield', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.675000,40.964530,0.0 -73.675120,40.965010,0.0 -73.675460,40.965130,0.0 -73.675470,40.965300,0.0 -73.675740,40.965330,0.0 -73.675810,40.965290,0.0 -73.676580,40.965490,0.0 -73.677490,40.965420,0.0 -73.678400,40.965000,0.0 -73.678630,40.964820,0.0 -73.679410,40.965210,0.0 -73.679530,40.965170,0.0 -73.680930,40.965660,0.0 -73.674800,40.977120,0.0 -73.673540,40.979940,0.0 -73.672880,40.982160,0.0 -73.669080,40.983150,0.0 -73.668430,40.983440,0.0 -73.667550,40.984070,0.0 -73.666960,40.985520,0.0 -73.666240,40.986460,0.0 -73.666070,40.987050,0.0 -73.666150,40.988030,0.0 -73.666600,40.989570,0.0 -73.666780,40.990390,0.0 -73.666330,40.991650,0.0 -73.664710,40.994230,0.0 -73.664640,40.995260,0.0 -73.665390,40.997200,0.0 -73.665390,40.997810,0.0 -73.664350,40.999740,0.0 -73.663740,41.000380,0.0 -73.662030,41.002200,0.0 -73.660160,41.004420,0.0 -73.659470,41.004100,0.0 -73.658280,41.003960,0.0 -73.656340,41.003180,0.0 -73.655980,41.002870,0.0 -73.655820,41.002800,0.0 -73.654580,41.002800,0.0 -73.652860,41.003070,0.0 -73.651020,41.003540,0.0 -73.649760,41.003570,0.0 -73.649530,41.003630,0.0 -73.648160,41.004550,0.0 -73.645870,41.006420,0.0 -73.644980,41.007300,0.0 -73.644130,41.007980,0.0 -73.644020,41.008150,0.0 -73.644110,41.008500,0.0 -73.645130,41.009740,0.0 -73.645530,41.010080,0.0 -73.645460,41.010350,0.0 -73.643930,41.011360,0.0 -73.643050,41.012230,0.0 -73.641680,41.014780,0.0 -73.640490,41.016360,0.0 -73.639830,41.017410,0.0 -73.639020,41.018360,0.0 -73.637920,41.020110,0.0 -73.637400,41.021160,0.0 -73.636860,41.021490,0.0 -73.636500,41.021540,0.0 -73.634970,41.020860,0.0 -73.633890,41.020980,0.0 -73.631980,41.021430,0.0 -73.630630,41.021520,0.0 -73.627210,41.021560,0.0 -73.627140,41.020750,0.0 -73.626460,41.019880,0.0 -73.625650,41.018970,0.0 -73.625040,41.018740,0.0 -73.622630,41.019150,0.0 -73.621930,41.019500,0.0 -73.620760,41.020690,0.0 -73.620090,41.020840,0.0 -73.619780,41.020820,0.0 -73.619530,41.021220,0.0 -73.619100,41.021450,0.0 -73.618510,41.021720,0.0 -73.618380,41.021680,0.0 -73.616620,41.022000,0.0 -73.615863,41.022094,0.0 -73.615130,41.021960,0.0 -73.614870,41.021740,0.0 -73.614690,41.021350,0.0 -73.614410,41.021180,0.0 -73.613970,41.021180,0.0 -73.613600,41.021380,0.0 -73.613040,41.022120,0.0 -73.612740,41.022350,0.0 -73.611510,41.023110,0.0 -73.610852,41.023292,0.0 -73.610130,41.023240,0.0 -73.608830,41.022790,0.0 -73.608230,41.022890,0.0 -73.607260,41.023940,0.0 -73.605730,41.024200,0.0 -73.605580,41.025610,0.0 -73.605660,41.028160,0.0 -73.605630,41.030970,0.0 -73.605500,41.032330,0.0 -73.605760,41.033340,0.0 -73.606170,41.034200,0.0 -73.606710,41.036650,0.0 -73.602500,41.036640,0.0 -73.601490,41.036910,0.0 -73.599590,41.037960,0.0 -73.596990,41.039230,0.0 -73.596720,41.039750,0.0 -73.595750,41.040590,0.0 -73.595570,41.041030,0.0 -73.593770,41.041820,0.0 -73.593180,41.042250,0.0 -73.592080,41.043410,0.0 -73.590390,41.044810,0.0 -73.589240,41.046160,0.0 -73.587980,41.048490,0.0 -73.587110,41.050990,0.0 -73.587280,41.051830,0.0 -73.586180,41.053920,0.0 -73.585530,41.054460,0.0 -73.585210,41.055650,0.0 -73.584270,41.056620,0.0 -73.583140,41.057040,0.0 -73.582670,41.057580,0.0 -73.581030,41.057640,0.0 -73.578970,41.057600,0.0 -73.577810,41.057940,0.0 -73.573420,41.057670,0.0 -73.572720,41.057850,0.0 -73.569540,41.059310,0.0 -73.568260,41.059460,0.0 -73.564250,41.059270,0.0 -73.561950,41.059180,0.0 -73.561010,41.059100,0.0 -73.559930,41.058720,0.0 -73.559610,41.059780,0.0 -73.559010,41.061070,0.0 -73.558510,41.062880,0.0 -73.558330,41.063290,0.0 -73.558420,41.064450,0.0 -73.549550,41.065710,0.0 -73.548760,41.066120,0.0 -73.546040,41.066800,0.0 -73.545770,41.066940,0.0 -73.544440,41.065950,0.0 -73.543260,41.064190,0.0 -73.541010,41.065010,0.0 -73.538020,41.065360,0.0 -73.537450,41.065230,0.0 -73.533120,41.065510,0.0 -73.533140,41.065650,0.0 -73.530910,41.066480,0.0 -73.529740,41.067440,0.0 -73.528320,41.068100,0.0 -73.526780,41.068410,0.0 -73.526810,41.069170,0.0 -73.526630,41.069500,0.0 -73.526360,41.069710,0.0 -73.525390,41.070090,0.0 -73.524540,41.070810,0.0 -73.523930,41.071480,0.0 -73.522040,41.071090,0.0 -73.521060,41.071190,0.0'.split(' ') 
+        }, { 
+          title: 'Rye, Greenwich, Stamford, Norwalk, Fairfield', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.521060,41.071190,0.0 -73.520020,41.071780,0.0 -73.518410,41.073000,0.0 -73.516480,41.071160,0.0 -73.508780,41.072560,0.0 -73.508390,41.072460,0.0 -73.505420,41.071260,0.0 -73.503620,41.070740,0.0 -73.501490,41.070710,0.0 -73.495140,41.070710,0.0 -73.491130,41.070590,0.0 -73.488720,41.070910,0.0 -73.485900,41.072690,0.0 -73.480180,41.077330,0.0 -73.479590,41.077650,0.0 -73.477230,41.078060,0.0 -73.472820,41.077630,0.0 -73.470660,41.077340,0.0 -73.469980,41.077390,0.0 -73.462100,41.085090,0.0 -73.461580,41.084930,0.0 -73.460330,41.084790,0.0 -73.459200,41.084370,0.0 -73.458650,41.084330,0.0 -73.455800,41.084850,0.0 -73.454880,41.085090,0.0 -73.453160,41.085880,0.0 -73.452310,41.086370,0.0 -73.451610,41.087080,0.0 -73.451230,41.087750,0.0 -73.450670,41.088180,0.0 -73.447830,41.088650,0.0 -73.446540,41.088320,0.0 -73.443820,41.089490,0.0 -73.442740,41.089880,0.0 -73.441690,41.090750,0.0 -73.440900,41.091580,0.0 -73.440510,41.091850,0.0 -73.440180,41.091900,0.0 -73.439120,41.091650,0.0 -73.437490,41.091670,0.0 -73.433490,41.093440,0.0 -73.432520,41.094340,0.0 -73.431870,41.094740,0.0 -73.431130,41.094870,0.0 -73.429730,41.094520,0.0 -73.427760,41.094800,0.0 -73.426890,41.095350,0.0 -73.425990,41.096170,0.0 -73.425520,41.097000,0.0 -73.423500,41.098880,0.0 -73.423180,41.099330,0.0 -73.422910,41.099910,0.0 -73.421260,41.099080,0.0 -73.416060,41.098880,0.0 -73.415590,41.098790,0.0 -73.413450,41.099100,0.0 -73.412230,41.099550,0.0 -73.411920,41.099730,0.0 -73.410790,41.099610,0.0 -73.407210,41.099490,0.0 -73.406600,41.099290,0.0 -73.406070,41.098780,0.0 -73.405440,41.099130,0.0 -73.404780,41.099760,0.0 -73.403640,41.101140,0.0 -73.403660,41.101830,0.0 -73.403540,41.101920,0.0 -73.402530,41.102080,0.0 -73.402470,41.102170,0.0 -73.402680,41.102530,0.0 -73.40270,41.10271,0 -73.400670,41.103160,0.0 -73.398590,41.103900,0.0 -73.398140,41.104000,0.0 -73.398750,41.105330,0.0 -73.397100,41.106020,0.0 -73.392670,41.106200,0.0 -73.389950,41.106220,0.0 -73.388150,41.106530,0.0 -73.386530,41.106610,0.0 -73.385400,41.106850,0.0 -73.384340,41.107250,0.0 -73.383300,41.107780,0.0 -73.381300,41.108610,0.0 -73.379450,41.110020,0.0 -73.377060,41.113630,0.0 -73.375110,41.117610,0.0 -73.371850,41.118290,0.0 -73.369370,41.118780,0.0 -73.369230,41.118920,0.0 -73.369300,41.119390,0.0 -73.369530,41.119470,0.0 -73.370360,41.119280,0.0 -73.370400,41.120780,0.0 -73.370320,41.122410,0.0 -73.368700,41.122830,0.0 -73.367320,41.123300,0.0 -73.365250,41.123280,0.0 -73.361600,41.122120,0.0 -73.361170,41.122070,0.0 -73.357300,41.122600,0.0 -73.345910,41.123570,0.0 -73.345180,41.123860,0.0 -73.342060,41.125490,0.0 -73.341070,41.125870,0.0 -73.340140,41.126460,0.0 -73.339010,41.128050,0.0 -73.337920,41.128150,0.0 -73.337390,41.128060,0.0 -73.335120,41.127330,0.0 -73.332510,41.126920,0.0 -73.331610,41.127010,0.0 -73.330170,41.127400,0.0 -73.329690,41.127390,0.0 -73.329520,41.127300,0.0 -73.328840,41.126460,0.0 -73.327260,41.125920,0.0 -73.326820,41.125680,0.0 -73.326640,41.125490,0.0 -73.326160,41.124070,0.0 -73.324880,41.122720,0.0 -73.323960,41.122070,0.0 -73.320880,41.121270,0.0 -73.318220,41.120620,0.0 -73.317130,41.119980,0.0 -73.317040,41.119680,0.0 -73.317080,41.118960,0.0 -73.316870,41.118800,0.0 -73.316000,41.118480,0.0 -73.314840,41.117660,0.0 -73.313690,41.117190,0.0 -73.310910,41.116780,0.0 -73.309300,41.117550,0.0 -73.304710,41.120690,0.0 -73.301890,41.122040,0.0 -73.300650,41.122380,0.0 -73.299150,41.123590,0.0 -73.299080,41.123820,0.0 -73.299210,41.124670,0.0 -73.299150,41.124770,0.0 -73.295470,41.126440,0.0 -73.294490,41.127200,0.0 -73.293900,41.127780,0.0 -73.292180,41.129080,0.0 -73.290100,41.131070,0.0 -73.289710,41.131690,0.0 -73.289330,41.132680,0.0 -73.289210,41.132900,0.0 -73.288430,41.132570,0.0 -73.286270,41.132240,0.0 -73.285140,41.131920,0.0 -73.284690,41.132050,0.0 -73.283220,41.132990,0.0 -73.282730,41.133120,0.0 -73.280860,41.134390,0.0 -73.279780,41.135590,0.0 -73.278770,41.136220,0.0 -73.277420,41.136510,0.0 -73.276970,41.136680,0.0 -73.276250,41.137180,0.0 -73.275730,41.137710,0.0 -73.274780,41.137560,0.0 -73.273910,41.137580,0.0 -73.273590,41.137650,0.0 -73.273210,41.137880,0.0 -73.273050,41.134040,0.0 -73.272920,41.132930,0.0 -73.263240,41.133750,0.0 -73.262060,41.133510,0.0 -73.261570,41.133600,0.0 -73.259610,41.135030,0.0 -73.253230,41.139960,0.0 -73.249750,41.143330,0.0 -73.247230,41.145790,0.0 -73.246390,41.146150,0.0 -73.244820,41.147070,0.0 -73.243900,41.148080,0.0 -73.243510,41.149180,0.0 -73.242990,41.149650,0.0 -73.240720,41.151060,0.0 -73.238110,41.152960,0.0 -73.239450,41.154130,0.0 -73.238790,41.154590,0.0 -73.239550,41.155270,0.0 -73.237210,41.157030,0.0 -73.237210,41.157080,0.0'.split(' ') 
+        }, { 
+          title: 'Nature trail', 
+          segmentType: 'TRAIL_UNPAVED', 
+          pointsAsKMLStrings: '-73.237210,41.157080,0.0 -73.237140,41.157110,0.0 -73.237140,41.157240,0.0 -73.237250,41.157280,0.0 -73.237140,41.157480,0.0 -73.236920,41.157640,0.0 -73.236760,41.157640,0.0 -73.236630,41.157530,0.0 -73.236420,41.157690,0.0 -73.235860,41.157320,0.0 -73.235340,41.157330,0.0 -73.233810,41.158560,0.0 -73.233850,41.158830,0.0 -73.233630,41.159100,0.0 -73.233290,41.159120,0.0 -73.232890,41.158780,0.0 -73.232750,41.158760,0.0 -73.232380,41.159030,0.0 -73.232350,41.159410,0.0 -73.232050,41.159910,0.0 -73.231940,41.159990,0.0 -73.231980,41.160080,0.0'.split(' ') 
+        }, { 
+          title: 'Bridgeport and surrounding towns', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.231980,41.160080,0.0 -73.231060,41.160420,0.0 -73.230300,41.160960,0.0 -73.233180,41.163640,0.0 -73.228020,41.166770,0.0 -73.230700,41.169390,0.0 -73.230260,41.170030,0.0 -73.228744,41.173830,0.0 -73.228121,41.174495,0.0 -73.226700,41.175125,0.0 -73.222982,41.176462,0.0 -73.220820,41.176740,0.0 -73.218146,41.177620,0.0 -73.214810,41.179074,0.0 -73.208970,41.173830,0.0 -73.198944,41.174728,0.0 -73.196020,41.176545,0.0 -73.194121,41.177590,0.0 -73.192034,41.178685,0.0 -73.187609,41.179612,0.0 -73.186584,41.179592,0.0  -73.180928,41.177740,0.0 -73.178165,41.176984,0.0 -73.175421,41.176600,0.0 -73.174805,41.176705,0.0 -73.173860,41.177248,0.0 -73.164184,41.180930,0.0 -73.158702,41.182999,0.0 -73.156690,41.183717,0.0 -73.154200,41.183870,0.0 -73.152830,41.184250,0.0 -73.151160,41.184300,0.0 -73.148320,41.184330,0.0 -73.143193,41.184953,0.0 -73.141835,41.185570,0.0 -73.140372,41.186386,0.0 -73.139560,41.186720,0.0 -73.135600,41.186920,0.0 -73.133680,41.187070,0.0 -73.130290,41.186850,0.0 -73.129360,41.186670,0.0 -73.128550,41.186670,0.0 -73.127830,41.186790,0.0 -73.127020,41.187190,0.0 -73.124550,41.189340,0.0 -73.123940,41.190330,0.0 -73.123600,41.191590,0.0 -73.122830,41.194460,0.0 -73.122390,41.195230,0.0 -73.118076,41.198142,0.0 -73.114904,41.199907,0.0 -73.113745,41.200420,0.0 -73.112544,41.200593,0.0 -73.111778,41.200503,0.0 -73.108347,41.199817,0.0 -73.107516,41.199884,0.0 -73.102086,41.202121,0.0 -73.098470,41.197390,0.0 -73.097120,41.196330,0.0 -73.096650,41.196160,0.0 -73.094690,41.196060,0.0 -73.090640,41.196230,0.0 -73.089460,41.195790,0.0 -73.088300,41.195050,0.0 -73.087780,41.195000,0.0 -73.086770,41.195090,0.0 -73.086340,41.194940,0.0 -73.084830,41.193880,0.0 -73.083460,41.193280,0.0 -73.082480,41.194420,0.0 -73.081630,41.195010,0.0 -73.080710,41.195510,0.0'.split(' ') 
+        }, { 
+          title: 'Walnut Beach / Silver Sands boardwalk', 
+          segmentType: 'TRAIL_PAVED', 
+          pointsAsKMLStrings: '-73.080710,41.195510,0.0 -73.080060,41.194770,0.0 -73.079750,41.194750,0.0 -73.078710,41.195520,0.0 -73.073980,41.197100,0.0 -73.073260,41.197450,0.0 -73.072130,41.197650,0.0 -73.071010,41.197530,0.0 -73.070330,41.197240,0.0 -73.069880,41.197240,0.0 -73.069250,41.197410,0.0 -73.068730,41.197440,0.0 -73.066840,41.198030,0.0 -73.066350,41.198340,0.0 -73.066180,41.198310,0.0 -73.065220,41.199940,0.0 -73.065830,41.200200,0.0 -73.065830,41.200350,0.0 -73.065730,41.200400,0.0 -73.065820,41.200570,0.0 -73.065088,41.200452,0.0'.split(' ') 
+        }, { 
+          title: 'Milford and surrounding towns', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.065088,41.200452,0.0 -73.064406,41.201717,0.0 -73.062200,41.205510,0.0 -73.061240,41.206530,0.0 -73.060020,41.207550,0.0 -73.056830,41.209890,0.0 -73.059380,41.211860,0.0 -73.057550,41.213220,0.0 -73.057811,41.213531,0.0 -73.058036,41.214947,0.0 -73.058060,41.216430,0.0 -73.062230,41.219400,0.0 -73.058560,41.221190,0.0 -73.056690,41.222370,0.0 -73.056550,41.222200,0.0 -73.055670,41.221610,0.0'.split(' ') 
+        }, { 
+          title: 'Footbridge', 
+          segmentType: 'TRAIL_PAVED', 
+          pointsAsKMLStrings: '-73.055670,41.221610,0.0 -73.055410,41.221740,0.0 -73.054980,41.221850,0.0'.split(' ') 
+        }, { 
+          title: 'Milford and surrounding towns', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.054980,41.221850,0.0 -73.054538,41.221381,0.0 -73.054010,41.221010,0.0 -73.053380,41.220730,0.0 -73.052880,41.220610,0.0 -73.052395,41.220719,0.0 -73.051990,41.221090,0.0 -73.051569,41.221165,0.0 -73.049660,41.221170,0.0 -73.049440,41.216640,0.0 -73.049190,41.216080,0.0 -73.046690,41.212680,0.0 -73.046710,41.211390,0.0 -73.046290,41.210650,0.0 -73.044410,41.209300,0.0 -73.043740,41.208730,0.0 -73.042770,41.207050,0.0 -73.041550,41.206020,0.0 -73.041130,41.205930,0.0 -73.039420,41.206270,0.0 -73.038200,41.207120,0.0 -73.035290,41.208520,0.0 -73.034330,41.208830,0.0 -73.032330,41.207560,0.0 -73.030030,41.208000,0.0 -73.025286,41.208151,0.0 -73.023500,41.208160,0.0 -73.020850,41.209240,0.0 -73.020390,41.209320,0.0 -73.016790,41.209100,0.0 -73.016200,41.209190,0.0 -73.015220,41.209690,0.0 -73.014740,41.210200,0.0 -73.012420,41.213360,0.0 -73.011660,41.214000,0.0 -73.008940,41.215320,0.0 -73.007900,41.216160,0.0 -73.007160,41.217200,0.0 -73.005720,41.220680,0.0 -73.003710,41.223260,0.0 -73.001840,41.223810,0.0 -73.000920,41.224040,0.0 -73.000330,41.224500,0.0 -72.997880,41.227100,0.0 -72.997330,41.228490,0.0 -72.993010,41.229480,0.0 -72.992200,41.229880,0.0 -72.986260,41.236130,0.0 -72.985500,41.236220,0.0 -72.984690,41.236080,0.0 -72.982660,41.235810,0.0 -72.976990,41.234670,0.0 -72.976220,41.234730,0.0 -72.975460,41.235010,0.0 -72.975010,41.235370,0.0 -72.972820,41.238090,0.0 -72.971790,41.239770,0.0 -72.970800,41.242010,0.0 -72.970280,41.243040,0.0 -72.969730,41.243760,0.0 -72.966950,41.246250,0.0 -72.965720,41.246960,0.0 -72.964280,41.247540,0.0 -72.963840,41.247940,0.0 -72.963530,41.248600,0.0 -72.962940,41.251010,0.0 -72.962530,41.251700,0.0 -72.961520,41.252540,0.0 -72.959580,41.253540,0.0'.split(' ') 
+        }, { 
+          title: 'Savin Rock trail', 
+          segmentType: 'TRAIL_PAVED', 
+          pointsAsKMLStrings: '-72.959580,41.253540,0.0 -72.959430,41.253340,0.0 -72.959200,41.252660,0.0 -72.958950,41.252510,0.0 -72.958010,41.252510,0.0 -72.957310,41.252970,0.0 -72.956910,41.253670,0.0 -72.956500,41.254030,0.0 -72.955290,41.254320,0.0 -72.954250,41.254940,0.0 -72.953350,41.255510,0.0 -72.947620,41.257210,0.0 -72.942210,41.258530,0.0'.split(' ') 
+        }, { 
+          title: 'New Haven streets', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-72.942210,41.258530,0.0 -72.937500,41.259650,0.0 -72.935400,41.260430,0.0 -72.932950,41.262230,0.0 -72.931800,41.264530,0.0 -72.931760,41.265170,0.0 -72.933400,41.268790,0.0 -72.937450,41.273240,0.0 -72.939070,41.275940,0.0 -72.941910,41.279030,0.0 -72.946630,41.281520,0.0 -72.953210,41.285350,0.0 -72.958970,41.289310,0.0 -72.959150,41.293740,0.0 -72.958860,41.294670,0.0 -72.959100,41.295690,0.0 -72.962040,41.300250,0.0 -72.964130,41.302420,0.0 -72.964470,41.303010,0.0 -72.964880,41.304070,0.0 -72.965300,41.304580,0.0 -72.968320,41.306870,0.0 -72.969345,41.307685,0.0 -72.967400,41.308675,0.0 -72.966057,41.309093,0.0 -72.964029,41.309436,0.0 -72.963480,41.311960,0.0 -72.963570,41.312660,0.0 -72.963864,41.313343,0.0 -72.963940,41.314120,0.0 -72.963510,41.315570,0.0 -72.950350,41.312670,0.0 -72.939200,41.310150,0.0 -72.931280,41.308360,0.0 -72.928690,41.307290,0.0'.split(' ') 
+        }
+
+      ];
+}
+
+
+function getVanRouteConfigs() {
+    // Paste segment configurations into the return [ ] array
+
+    return [
+        {
+          title: 'Going around the Scott Street segment', 
+          segmentType: 'VAN', 
+          pointsAsKMLStrings: '-73.924440,40.713920,0.0 -73.924280,40.713970,0.0 -73.923720,40.714000,0.0 -73.916380,40.713540,0.0 -73.916270,40.713320,0.0 -73.918080,40.712700,0.0 -73.919071,40.712120,0.0 -73.919580,40.711750,0.0 -73.920090,40.711170,0.0 -73.921860,40.709430,0.0'.split(' ') 
+        }, { 
+          title: 'Highland Park / Reservoir', 
+          segmentType: 'VAN', 
+          pointsAsKMLStrings: '-73.889510,40.686930,0.0 -73.888930,40.685570,0.0 -73.888730,40.685400,0.0 -73.888450,40.685270,0.0 -73.888150,40.685240,0.0 -73.886120,40.686000,0.0 -73.884550,40.686680,0.0 -73.884250,40.686740,0.0'.split(' ') 
+        }
+
+      ];
+}
+
+function createSegmentArray(map, segmentConfigs) {
+    var segmentArray = [];
+
+    for (var segNum = 0; segNum < segmentConfigs.length; segNum++) {
+	var latLngArray = [];
+	for (var i=0; i < segmentConfigs[segNum].pointsAsKMLStrings.length; i++) {
+            if (segmentConfigs[segNum].pointsAsKMLStrings[i]) {  // make sure it's defined
+	       var kmlTriple = segmentConfigs[segNum].pointsAsKMLStrings[i].split(',');    // KML style lists lng first then lat
+	       latLngArray.push(new google.maps.LatLng(kmlTriple[1], kmlTriple[0]));
+            }
+        }
+
+        segmentArray.push(addStyledLine(latLngArray, map, segmentConfigs[segNum].segmentType, segmentConfigs[segNum].title));
+    }
+
+    return segmentArray;
+}
+
+function createSegmentLayer(map) {
+    var segmentConfigs = getSegmentConfigs();
+
+    createSegmentArray(map, segmentConfigs);
+
+    activeState.vanRoutes = createSegmentArray(map, getVanRouteConfigs());  // again, less than perfect design, must fix
+}
+
+
+function createSliderButtonHtml(onclickFunctionName, currentState) {
+    var htmlOutput = '<!-- Rounded switch -->';
+    htmlOutput += '<div><label class="switch">';
+    htmlOutput += '  <input type="checkbox" onclick="' + onclickFunctionName + '(this);" ' + (currentState ? 'checked' : '') + '>';
+    htmlOutput += '  <div class="slider round"></div>';
+    htmlOutput += '</label></div>';
+
+    return htmlOutput;
+}
+
+function makeSVG(width, height, object) {
+    var svgText = '<svg width="' + width + '" height="' + height + '" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg"><g>';
+    svgText += object + '</g></svg>';
+    return svgText;
+}
+
+function createButtonTable() {
+    function addRow(label, onclickFunctionName, currentState, optionalIcon) { // Utility
+        var rowHtml = '<tr><td><b>' + label + '</b></td>';
+        rowHtml += '<td>' + (optionalIcon || '') + '</td>';
+        rowHtml += ' <td>' + createSliderButtonHtml(onclickFunctionName, currentState) + '</td> </tr>';
+        return rowHtml;
+    }
+
+    var htmlOutput = '';
+    var thisIcon = '';
+    if (InitialSettings.allowGeolocate || InitialSettings.allowBathrooms || InitialSettings.allowVanRoutes) { // only create table when there's at least one control needed
+        htmlOutput += '<!-- Settings table -->';
+        htmlOutput += '<table>';
+        if (InitialSettings.allowGeolocate) {
+            var circleSVG = '<circle cx="20" cy="10" r="8" stroke="' + Colors.MEDIUM_BLUE + '" stroke-width="2" fill="' + Colors.GREENISH_BLUE + '" />';
+            thisIcon = '<div>' + makeSVG(40, 20, circleSVG) + '</div>';
+            htmlOutput += addRow('Show Location', 'handleGeolocate', activeState.showGeolocate, thisIcon);
+        }
+        if (InitialSettings.allowBathrooms) {
+            var wedgeSVG = '';
+            wedgeSVG += '<line x1="15" y1="20" x2="20" y2="5" stroke="' + Colors.MEDIUM_PURPLE + '" stroke-width="2" fill="none" />';
+            wedgeSVG += '<line x1="20" y1="5" x2="25" y2="20" stroke="' + Colors.MEDIUM_PURPLE + '" stroke-width="2" fill="none" />';
+            wedgeSVG += '<line x1="25" y1="20" x2="20" y2="15" stroke="' + Colors.MEDIUM_PURPLE + '" stroke-width="2" fill="none" />';
+            wedgeSVG += '<line x1="20" y1="15" x2="15" y2="20" stroke="' + Colors.MEDIUM_PURPLE + '" stroke-width="2" fill="none" />';
+            thisIcon = '<div>' + makeSVG(40, 20, wedgeSVG)  + '</div>';
+            htmlOutput += addRow('Show Bathrooms', 'handleBathrooms', activeState.showBathrooms, thisIcon);
+        }
+        if (InitialSettings.allowVanRoutes) {
+            var hatchedSVG = createHatchedGraySVG(10, 10);
+            thisIcon = '<div>' + makeSVG(40, 20, hatchedSVG)  + '</div>';
+            htmlOutput += addRow('Show Van Routes', 'handleVanRoutes', activeState.showVanRoutes, thisIcon);
+        }
+        htmlOutput += '</table>';
+    }
+
+    return htmlOutput;
+}
+
+
+function createHatchedGraySVG(repetitions, yvalue) {
+    var resultSVG = '';
+    for (var i=0; i< repetitions; i++) {
+        resultSVG += '<line x1="' + (i*5-2) + '" y1="' + (yvalue+4) + '" x2="' + (i*5+2) + '" y2="' + yvalue + '" stroke-width="2" stroke="' + Colors.MODERATE_GREY + '" fill="none" />';
+    }
+    return resultSVG;
+}
+
+
+function createLegend(map) {
+    var legend = document.getElementById('legend');
+
+    function appendToLegend(legend, htmlCode) {
+        var div = document.createElement('div');
+        div.innerHTML = htmlCode;
+        legend.appendChild(div);
+    }
+
+    appendToLegend(legend, '<span style="color:blue;"><b>Road</b> (open access)</span>');
+    var solidLineSegment = '<line x1="0" y1="4" x2="25" y2="2" stroke-width="2.5" stroke="' + Colors.MEDIUM_BLUE + '" fill="none" id="svg_1_1"/>';
+    solidLineSegment += '<line x1="25" y1="2" x2="60" y2="3" stroke-width="2.5" stroke="' + Colors.MEDIUM_BLUE + '" fill="none" id="svg_1_2"/>';
+    solidLineSegment += '<line x1="60" y1="3" x2="150" y2="6" stroke-width="2.5" stroke="' + Colors.MEDIUM_BLUE + '" fill="none" id="svg_1_3"/>';
+    appendToLegend(legend, makeSVG(100, 8, solidLineSegment));
+
+    appendToLegend(legend, '<span style="color:blue;"><b>Bridge</b> (no van access)</span>');
+    var dashedLineSegment = '';
+    for (var i=0; i< 8; i++) {
+        dashedLineSegment += '<line x1="' + (i*20) + '" y1="' + (1+i/2) + '" x2="' + (i*20+15) + '" y2="' + (1.5+i/2) + '" stroke-width="3" stroke="' + Colors.MEDIUM_BLUE + '" fill="none" id="svg_2_' + i + '"/>';
+    }
+    appendToLegend(legend, makeSVG(100, 8, dashedLineSegment));
+
+    appendToLegend(legend, '<span style="color:' + Colors.DARK_GREEN + ';"><b>Trail</b> (no van access)</span>');
+    var dottedLineSegment = '<line x1="0" y1="1" x2="150" y2="1" stroke-width="5" stroke="' + Colors.FAINT_GREEN + '" fill="none" id="svg_3_0"/>';
+    for (var i=0; i< 25; i++) {
+        dottedLineSegment += '<line x1="' + (i*6) + '" y1="1" x2="' + (i*6+3) + '" y2="1" stroke-width="3" stroke="' + Colors.DARK_GREEN + '" fill="none" id="svg_3_' + i + '"/>';
+    }
+    appendToLegend(legend, makeSVG(100, 8, dottedLineSegment));
+
+    appendToLegend(legend, '<span style="color:' + Colors.DARK_GREY + ';"><b>Van Route</b></span>');
+    var hatchedLineSegment = createHatchedGraySVG(30, 1);
+    appendToLegend(legend, makeSVG(100, 8, hatchedLineSegment));
+
+    appendToLegend(legend, '<span style="color:black;"><b>Access Point</b></span>');
+
+    var twoDiamonds = '<rect height="5" width="5" x="2" y="5" transform="rotate(45 4.5 7.5)" stroke-width="2" stroke="' + Colors.MEDIUM_BLUE + '" fill="#FFFFFF" id="svg_3_1"/>';
+    twoDiamonds += '<text xml:space="preserve" x="10" y="12" text-anchor="left" stroke-width="0" stroke="#000000" fill="' + Colors.MEDIUM_BLUE + '" font-size="12" font-weight="bold" font-family="sans-serif" id="svg_3_2">16.9</text>';
+    twoDiamonds += '<rect height="5" width="5" x="45" y="5" transform="rotate(45 47.5 7.5)" stroke-width="2" stroke="' + Colors.DARK_GREEN + '" fill="#FFFFFF" id="svg_3_3"/>';
+    twoDiamonds += '<text xml:space="preserve" x="53" y="12" text-anchor="left" stroke-width="0" stroke="#000000" fill="' + Colors.DARK_GREEN + '" font-size="12" font-weight="bold" font-family="sans-serif" id="svg_3_2">45.2</text>';
+    appendToLegend(legend, makeSVG(80, 16, twoDiamonds));
+
+    appendToLegend(legend, '<span style="color:black;"><b>Turn Point</b></span>');
+
+    var twoCircles = '<circle r="2" cx="4" cy="5" stroke-width="0" stroke="#000000" fill="' + Colors.MEDIUM_BLUE + '" id="svg_4_1"/>';
+    twoCircles += '<text xml:space="preserve" x="10" y="9" text-anchor="left" stroke-width="0" stroke="#000000" fill="' + Colors.MEDIUM_BLUE + '" font-size="10" font-weight="bold" font-family="sans-serif" id="svg_3_2">47.5</text>';
+    twoCircles += '<circle r="2" cx="47" cy="5" stroke-width="0" stroke="#000000" fill="' + Colors.DARK_GREEN + '" id="svg_4_3"/>';
+    twoCircles += '<text xml:space="preserve" x="53" y="9" text-anchor="left" stroke-width="0" stroke="#000000" fill="' + Colors.DARK_GREEN + '" font-size="10" font-weight="bold" font-family="sans-serif" id="svg_3_4">16.8</text>';
+    appendToLegend(legend, makeSVG(80, 13, twoCircles));
+
+    appendToLegend(legend, '<span style="color:' + Colors.MODERATE_GREY + ';">Details? Click on map</span>');
+
+    map.controls[google.maps.ControlPosition.RIGHT_BOTTOM].push(legend);
+
+
+    var popupLegend = '<div><b>' + InitialSettings.title + '</b></div><br>';
+    popupLegend += '<div><span style="color:blue;"><b>Road</b> (easy access from van)</span></div>';
+    popupLegend += '<div>' + makeSVG(150, 8, solidLineSegment) + '</div>';
+
+    popupLegend += '<div><span style="color:blue;"><b>Bridge</b> (no access from van)</span></div>';
+    popupLegend += '<div>' + makeSVG(150, 8, dashedLineSegment) + '</div>';
+
+    popupLegend += '<div><span style="color:' + Colors.DARK_GREEN + ';"><b>Trail</b> (limited access)</span></div>';
+    popupLegend += '<div>' + makeSVG(150, 8, dottedLineSegment) + '</div>';
+
+    popupLegend += '<div><span style="color:' + Colors.DARK_GREY + ';"><b>Van Route</b> (between segments)</span></div>';
+    popupLegend += '<div>' + makeSVG(150, 8, hatchedLineSegment) + '</div>';
+
+    // To save vertical space, put access points next to each other in a table
+
+    popupLegend += '<div><table><tr><td>';
+
+    popupLegend += '<div><span style="color:black;"><b>Access Point</b><br>(possible exchange)</span></div>';
+    popupLegend += '<div>' + makeSVG(100, 16, twoDiamonds) + '</div>';
+
+    popupLegend += '</td><td>&nbsp;</td><td>';
+
+    popupLegend += '<div><span style="color:black;"><span style="color:black;"><b>Turn Point</b><br>(zoom in to view)</span></div>';
+    popupLegend += '<div>' + makeSVG(100, 13, twoCircles) + '</div>';
+
+    popupLegend += '</td></tr></table></div>';
+
+    popupLegend += '<div><span style="color:black;">Click marker on map for more information.</span></div>';
+
+    popupLegend += '<div>';
+    popupLegend += '<span style="color:black;">Mileage markers correspond to official <br>turn-by-turn directions. </span>';
+
+    if (InitialSettings.hasTurnByTurnDirections) {
+        popupLegend += '<a href="' + InitialSettings.turnByTurnDirectionsUrl + '" target="_blank">View Directions</a>';
+    }
+    popupLegend += '</div><br>';
+
+    var iw = new google.maps.InfoWindow({
+        content: popupLegend 
+    });
+
+    activeState.map = map;  // Bad design, must improve this
+    activeState.openIW = iw;  // Bad design, must improve this
+
+    google.maps.event.addListener(map, "click", function (e) { 
+        var currentCenter = map.getCenter();
+        var latLngZoomLiteral = currentCenter.lat().toFixed(4) + ',' + currentCenter.lng().toFixed(4) + ',' + map.getZoom();
+        var currentURL = window.location.href;
+        if (currentURL.indexOf('?') > -1) {
+            currentURL = currentURL.substring(0, currentURL.indexOf('?'));
+        }
+        var linkURL = currentURL + '?' + latLngZoomLiteral;
+        var currentViewHtml = '<br><div>Current view: <a href="' + linkURL + '">' + latLngZoomLiteral + '</a></div>';
+        var buttonTable = createButtonTable();
+        iw.setContent(popupLegend + buttonTable + currentViewHtml);
+        iw.setPosition(e.latLng);
+        iw.open(map, this); 
+      });
+
+}
+
+
+function handleGeolocate(checkbox) {
+    activeState.showGeolocate = checkbox.checked;
+
+/* // The following works OK but is resource-inefficient if someone turns on/off geolocation multiple times
+    if (checkbox.checked) {
+        activeState.geolocationMarker = showCurrentGeoLocation(activeState.map);
+    } else {
+        activeState.geolocationMarker.setMap(null);
+        activeState.geolocationMarker = null;
+    }
+*/
+
+    if (checkbox.checked) {
+        if (activeState.geolocationMarker) {
+            activeState.geolocationMarker.setMarkerOptions({ visible : true });
+            activeState.geolocationMarker.setCircleOptions({ visible : true });
+            activeState.map.setCenter(activeState.geolocationMarker.getPosition());
+        } else {
+            activeState.geolocationMarker = showCurrentGeoLocation(activeState.map);
+        }
+    } else {
+        if (activeState.geolocationMarker) {
+            activeState.geolocationMarker.setMarkerOptions({ visible : false });
+            activeState.geolocationMarker.setCircleOptions({ visible : false });
+        }
+    }
+
+}
+
+
+function handleBathrooms(checkbox) {
+    activeState.showBathrooms = checkbox.checked;
+
+    if (checkbox.checked) {
+        // If zoomed out too far, zoom in some
+        if (activeState.map.getZoom() < Config.ZOOMDISPLAY["SPECIALMARKERS"]-1) {
+            activeState.map.setZoom(Config.ZOOMDISPLAY["SPECIALMARKERS"]-1);
+        }
+    }
+
+    // Just by calling the redraw function, it will either display or hide markers based on activeState.showBathrooms
+    showOrHideElements(activeState.map.getZoom());
+
+}
+
+
+function handleVanRoutes(checkbox) {
+    activeState.showVanRoutes = checkbox.checked;
+
+    if (checkbox.checked) {
+        // If zoomed out too far, zoom in some
+        if (activeState.map.getZoom() < Config.ZOOMDISPLAY["SPECIALMARKERS"]-1) {
+            activeState.map.setZoom(Config.ZOOMDISPLAY["SPECIALMARKERS"]-1);
+        }
+    }
+
+    // Just by calling the redraw function, it will either display or hide van routes based on activeState.showVanRoutes
+    showOrHideElements(activeState.map.getZoom());
+}
+
+
+function showCurrentGeoLocation(map) {
+    var geolocationMarker = null;  // remains null if unable to turn on the marker
+
+    function handleLocationError(browserHasGeolocation, pos) { // Utility
+        var errorWindow = new google.maps.InfoWindow({map: map});
+        errorWindow.setPosition(pos);
+        errorWindow.setContent(browserHasGeolocation ?
+                          'Error: The Geolocation service failed.' :
+                          'Error: Your browser doesn\'t support geolocation.');
+    }
+
+    // Try HTML5 geolocation.
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(function(position) {
+            var pos = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude
+              };
+
+            map.setCenter(pos);
+        }, function() {
+            handleLocationError(true, map.getCenter());
+        });
+
+        geolocationMarker = new GeolocationMarker();
+        geolocationMarker.setCircleOptions({fillColor: Colors.FAINT_GREY });
+
+        google.maps.event.addListener(geolocationMarker, 'geolocation_error', function(e) {
+            alert('There was an error obtaining your position. Message: ' + e.message);
+          });
+
+        geolocationMarker.setMap(map);
+
+    } else {
+        // Browser doesn't support Geolocation
+        handleLocationError(false, map.getCenter());
+    }
+
+    return geolocationMarker;
+}
+
+
+
+function readURLParams(startOptions) {
+
+    function isNumeric(n) {
+      return !isNaN(parseFloat(n)) && isFinite(n);
+    }
+
+    if (location.search.substring(1).length > 0) {
+        var parameters = location.search.substring(1).split("&");
+        if (parameters.length > 0) {
+            var latLngZoomLiteral = parameters[0].split(',');
+            if ((latLngZoomLiteral.length >= 2)
+                    && isNumeric(latLngZoomLiteral[0]) && isNumeric(latLngZoomLiteral[1])) {
+                startOptions.startLatitude =  latLngZoomLiteral[0];
+                startOptions.startLongitude = latLngZoomLiteral[1];
+                if ((latLngZoomLiteral.length >= 3) && isNumeric(latLngZoomLiteral[2])) {
+                    startOptions.zoomLevel = Number(latLngZoomLiteral[2]);
+                }
+            }
+        }
+    }
+}
+
+
+function initialize() {
+    var startOptions = {
+        zoomLevel : 10,
+        startLatitude : InitialSettings.startLatitude,
+        startLongitude : InitialSettings.startLongitude
+      };
+
+    readURLParams(startOptions);
+
+    var map = createMapObject(startOptions);
+
+    createSegmentLayer(map);
+
+    createLabelLayer(map);
+
+    createLegend(map);
+}
+
+
+google.maps.event.addDomListener(window, 'load', initialize);
+
+    </script>
+  </head>
+<body>
+    <div id="map-canvas"></div>
+    <div id="legend"></div>
+  </body>
+</html>
