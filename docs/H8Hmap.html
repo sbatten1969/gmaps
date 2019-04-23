@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html>
+  <head>
+  <title>Customized Route Map</title>
+
+  <script>
+    var InitialSettings = { // Configure these items first when creating a new map
+        title: 'H8H Customized Map, v1: Initial Release',   // Page title and also shows up in legend details
+        startLatitude : 40.72 + 0.50,         // Map initial center point, unless overridden
+        startLongitude : -73.95 + 0.20,   // Map initial center point, unless overridden
+        allowGeolocate : true,        // If true, allow user to activate Geolocation feature
+        allowBathrooms : false,        // If true, allow user to display bathrooms near the course. Requires programmer to actually implement bathroom points!
+        allowVanRoutes : false,        // If true, allow user to display alternate van routes. Requires programmer to actually implement van routes!
+        hasTurnByTurnDirections : true,   // true if the legend details should link to turn-by-turn directions, false otherwise
+        turnByTurnDirectionsUrl : 'https://docs.google.com/spreadsheets/d/1S3Vv9Ey24zBA_W8XVMbkGrO_1j8XWz7aCcbbCLKzyJg/edit'
+    };
+
+    if (Object.freeze) {
+        Object.freeze(InitialSettings);
+    }
+
+    if (InitialSettings.title) {
+        document.title = InitialSettings.title;
+    }
+  </script>
+
+  <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+  <meta charset="utf-8">
+
+  <link href="./mapcanvas.css" rel="stylesheet">
+  <link href="./sliderbutton.css" rel="stylesheet">
+
+  <script src="https://maps.googleapis.com/maps/api/js?v=3.exp&key=AIzaSyD6s-RAR1ycQsIPdZihOI5JSfZaGSIgc0M"></script>
+
+  <script type="text/javascript" src="https://sbatten1969.github.io/gmaps/markerwithlabel.js"></script>
+
+  <script type="text/javascript" src="./createmap.js"></script>
+  <script type="text/javascript" src="./geolocation-marker.js"></script>
+
+
+<script>
+"use strict";
+
+// Colors constant is set here, before everything else, in case any of the initialization routines need well-defined colors.
+var Colors = {
+    BLACK : '#000000',
+    DARK_GREY : '#404040',
+    MODERATE_GREY : '#606060',
+    LIGHT_GREY : '#808080',  // Caution: works as a background or fill color only; does not work as foreground color
+    FAINT_GREY : '#C0C0C0',
+    WHITE : '#FFFFFF',
+    MEDIUM_BLUE : '#0000CD',
+    GREENISH_BLUE : '#0060F0',
+    DARK_RED : '#800000',
+    MEDIUM_RED : '#CC0000',
+    BRIGHT_RED : '#FF0000',
+    DARK_GREEN : '#006400',
+    BRIGHT_GREEN : '#00FF00',
+    FAINT_GREEN : '#D0F7C7',
+    MEDIUM_PURPLE : '#A000A0',
+    BRIGHT_PURPLE : '#FF00FF'
+  };
+
+
+if (Object.freeze) {
+  Object.freeze(Colors);
+}
+
+
+// Global configuration constants
+
+var _iconpath = { // short-lifecycle object to be used in creation of icons
+    CIRCLE : google.maps.SymbolPath.CIRCLE,
+    CLOSED_DIAMOND : 'M -3,0 0,3 3,0 0,-3 z', // roll my own diamond; must render with scale=1.5 or so, otherwise it's too big
+    BROKEN_DIAMOND : 'M -2,-1 -3,0 -2,1 M -1,2 0,3, 1,2 M 2,1 3,0, 2,-1 M 1,-2 0,-3, -1,-2',  // roll my own broken diamond, version 1 -- in testing, Broken Diamond wasn't effective because it got lost visually
+    BROKEN_DIAMOND_ALT : 'M -3,1 -1,3 M 1,3 3,1 M 3,-1 1,-3 M -1,-3 -3,-1',  // roll my own broken diamond, version 2
+    WEDGE_UP : google.maps.SymbolPath.FORWARD_CLOSED_ARROW
+};
+
+var _metaConfig = { // short-lifecycle object to be used in creation of config
+    STANDARD_OPACITY : 0.6,
+    STANDARD_SCALE : 3.0,   // 3: reasonably thick lines and icons without being overly large
+
+    createDiamond : function(scale, strokeweight) {
+        return {
+	      path: _iconpath.CLOSED_DIAMOND,
+              scale: scale,  // scale should be set to a little more than half of STANDARD_SCALE for large, half = medium, less than half = small
+	      strokeWeight: strokeweight,
+	      fillColor: Colors.WHITE,
+	      fillOpacity: 0.3, // mostly transparent
+	      strokeColor: Colors.BLACK  // can be reset via colorIcon() function below
+          };
+      },
+
+    createCircle : function(scale, strokeweight) {
+        return {
+	      path: _iconpath.CIRCLE,
+              scale: scale,  // for circle, scale must be larger than diamond -- STANDARD_SCALE for large, 67% of STANDARD_SCALE for medium.  Less than 40% of STANDARD_SCALE may be too small
+	      strokeWeight: strokeweight,
+	      fillColor: Colors.WHITE,
+	      fillOpacity: 0.3, // mostly transparent
+	      strokeColor: Colors.BLACK  // can be reset via colorIcon() function below
+          };
+      },
+
+    createWedgeUp : function(scale, strokeweight) {
+        return {
+	      path: _iconpath.WEDGE_UP,
+              scale: scale,  // for wedge, scale must be similar to circle
+	      strokeWeight: strokeweight,
+	      fillColor: Colors.WHITE,
+	      fillOpacity: 0.1, // almost completely transparent
+	      strokeColor: Colors.BLACK  // can be reset via colorIcon() function below
+          };
+      },
+
+    DASHSTYLE : {
+        createLoose : function(scale) {
+            var thisScale = scale || 1.0;
+            return {
+                path : 'M 0,0 0,2',  // Long dash
+                repeat : (thisScale*5.33) + 'px'    // for line scale=3, repeat of 15-20px is relatively loose spacing
+              };
+          },
+        createTight : function (scale) {
+            var thisScale = scale || 1.0;
+            return {
+                path : 'M 0,0 0,2',  // Long dash
+                repeat : (thisScale*4) + 'px'    // for line scale=3, repeat of 10-12px is relatively tight spacing
+              };
+          },
+        createDots : function (scale) {
+            var thisScale = scale || 1.0;
+            return {
+                path : 'M 0,0 0,0.25',  // Short stubs that end up looking like dots instead of dashes
+                repeat : (thisScale*2) + 'px'    // for line scale=3, repeat of 5-7px is relatively even spcing
+              };
+          },
+        createSlashes : function (scale) {
+            var thisScale = scale || 1.0;
+            return {
+                path : 'M -1,0 0,1',  // Diagonal hatching
+                repeat : (thisScale*2) + 'px'    // for line scale=3, repeat of 5-7px is relatively even spcing
+              };
+          }
+      }
+
+  };
+
+
+var Config = {
+    DEFAULT_LINESCALE : _metaConfig.STANDARD_SCALE,
+    ZOOMDISPLAY : {
+        "SPECIALMARKERS" : 14, // Prior to this zoom, there would be too many special markers, cluttering the view
+        "SMALLMARKERS" : 13, // Prior to this zoom, there would be too many small markers, cluttering the view
+        "NONMAJORMARKERS" : 11 // Prior to this zoom, there would be too many big markers, cluttering the view
+      },
+    PATHSTYLE : {
+        "ROAD_OPEN" : {
+            foregroundColor: Colors.MEDIUM_BLUE,
+            backgroundColor: Colors.WHITE,
+            foregroundOpacity: _metaConfig.STANDARD_OPACITY * 0.75, // more transparent
+            labelColor: Colors.MEDIUM_BLUE
+          },
+        "ROAD_DIFFICULT" : {
+            foregroundColor: Colors.MEDIUM_RED,
+            backgroundColor: Colors.BRIGHT_RED,
+            foregroundOpacity: _metaConfig.STANDARD_OPACITY * 0.75, // more transparent
+            labelColor: Colors.MEDIUM_BLUE   // [sic]
+          },
+        "ROAD_NOVANACCESS" : {
+            foregroundColor: Colors.MEDIUM_BLUE,
+            backgroundColor: Colors.WHITE,
+            foregroundOpacity: _metaConfig.STANDARD_OPACITY * 0.75, // more transparent
+            labelColor: Colors.MEDIUM_BLUE,
+            dashOptions : _metaConfig.DASHSTYLE.createTight(_metaConfig.STANDARD_SCALE)  // Potentially confusing to viewer?
+          },
+        "TRAIL_PAVED" : {
+            foregroundColor: Colors.DARK_GREEN,
+            backgroundColor: Colors.BRIGHT_GREEN,
+            foregroundOpacity: _metaConfig.STANDARD_OPACITY * 1.1, // slightly more opaque
+            labelColor: Colors.DARK_GREEN,
+            dashOptions : _metaConfig.DASHSTYLE.createDots(_metaConfig.STANDARD_SCALE)
+          },
+        "TRAIL_UNPAVED" : {
+            foregroundColor: Colors.DARK_GREEN,   // Same as TRAIL_PAVED
+            backgroundColor: Colors.BRIGHT_GREEN,
+            foregroundOpacity: _metaConfig.STANDARD_OPACITY * 1.1,
+            labelColor: Colors.DARK_GREEN,
+            dashOptions : _metaConfig.DASHSTYLE.createDots(_metaConfig.STANDARD_SCALE)
+          },
+        "TRAIL_DIFFICULT" : {
+            foregroundColor: Colors.MEDIUM_RED,   // Same as ROAD_DIFFICULT, except this line is dashed
+            backgroundColor: Colors.BRIGHT_RED,
+            foregroundOpacity: _metaConfig.STANDARD_OPACITY * 0.75,
+            labelColor: Colors.DARK_GREEN,   // [sic]
+            dashOptions : _metaConfig.DASHSTYLE.createTight(_metaConfig.STANDARD_SCALE)
+          },
+        "VAN" : {
+            foregroundColor: Colors.DARK_GREY,
+            backgroundColor: Colors.LIGHT_GREY,
+            foregroundOpacity: _metaConfig.STANDARD_OPACITY,
+            labelColor: Colors.DARK_GREY,
+            scale : _metaConfig.STANDARD_SCALE * 0.8, // thinner
+            dashOptions : _metaConfig.DASHSTYLE.createSlashes(_metaConfig.STANDARD_SCALE * 0.8)
+          },
+        "INVISIBLE" : {  // Not really a path style, more of a point style -- when we want to add a short label without a physical marker
+            foregroundColor: Colors.LIGHT_GREY,  // Colors do not matter; foreground opacity is set to 0 (transparent)
+            backgroundColor: Colors.WHITE,
+            foregroundOpacity: 0.0, // invisible line
+            labelColor: Colors.DARK_GREY,
+            markerStrokeOpacity: -1.0  // invisible physical marker
+          },
+        "RED_DASHES" : {
+            foregroundColor: Colors.MEDIUM_RED,
+            backgroundColor: Colors.LIGHT_RED,
+            foregroundOpacity: _metaConfig.STANDARD_OPACITY * 0.75, // more transparent
+            labelColor: Colors.MEDIUM_RED,
+            dashOptions : _metaConfig.DASHSTYLE.createTight(_metaConfig.STANDARD_SCALE)
+          },
+        "DEFAULT" : {  // Fallback option if color selection isn't clear
+            foregroundColor: Colors.DARK_GREY,
+            backgroundColor: Colors.WHITE,
+            foregroundOpacity: _metaConfig.STANDARD_OPACITY,
+            labelColor: Colors.BLACK
+          }
+      },
+    OPACITY : { 
+        "STANDARD" :    _metaConfig.STANDARD_OPACITY,
+        "LABEL" :       _metaConfig.STANDARD_OPACITY * 1.25,  // more opaque
+        "MARKERSTROKE": _metaConfig.STANDARD_OPACITY * 1.25,  // more opaque
+        "MARKERFILL" :  _metaConfig.STANDARD_OPACITY * 0.5,  // NOT USED
+        "BACKGROUND" :  0.15  // very transparent
+      },
+    LABELPOSITION : {
+        "ABOVE" : new google.maps.Point(17, 22),
+        "LEFT"  : new google.maps.Point(44, 8),
+        "BELOW" : new google.maps.Point(17, -5),
+        "RIGHT" : new google.maps.Point(-6, 8),
+        "DEEP_BELOW" : new google.maps.Point(19, -9),
+        "DEFAULT" : new google.maps.Point(-6, 8) // same as RIGHT
+      },
+    LABELFONT : {
+        large : '16px',
+        medium : '14px',
+        small : '11px'
+      },
+    ICON : {  // These are colored black and must be recolored as desired
+        "DIAMOND" : {
+            large  : _metaConfig.createDiamond(_metaConfig.STANDARD_SCALE * 0.583, _metaConfig.STANDARD_SCALE * 0.667),
+            medium : _metaConfig.createDiamond(_metaConfig.STANDARD_SCALE * 0.500, _metaConfig.STANDARD_SCALE * 0.500),
+            small  : _metaConfig.createDiamond(_metaConfig.STANDARD_SCALE * 0.417, _metaConfig.STANDARD_SCALE * 0.417)
+          },
+        "CIRCLE" : {
+            large  : _metaConfig.createCircle(_metaConfig.STANDARD_SCALE * 1.000, _metaConfig.STANDARD_SCALE * 0.667),  // thinner stroke weight makes it obviously visible as a circle
+            medium : _metaConfig.createCircle(_metaConfig.STANDARD_SCALE * 0.667, _metaConfig.STANDARD_SCALE * 1.000),  // thicker stroke weight makes it seem like a filled circle
+            small  : _metaConfig.createCircle(_metaConfig.STANDARD_SCALE * 0.667, _metaConfig.STANDARD_SCALE * 0.500)
+          },
+        "WEDGE_UP" : {
+            large  : _metaConfig.createWedgeUp(_metaConfig.STANDARD_SCALE * 1.000, _metaConfig.STANDARD_SCALE * 0.667),
+            medium : _metaConfig.createWedgeUp(_metaConfig.STANDARD_SCALE * 0.667, _metaConfig.STANDARD_SCALE * 1.000),
+            small  : _metaConfig.createWedgeUp(_metaConfig.STANDARD_SCALE * 0.500, _metaConfig.STANDARD_SCALE * 0.500)
+          }
+      },
+    INFOWINDOW_TIMEOUT : 4000   // Timeout for an informational window (after the mouse leaves it), in ms.  0=no timeout
+  };
+
+
+// Throw away short-lifecycle objects required to help create 'config'
+_metaConfig = null;
+_iconpath = null;
+
+if (Object.freeze) {
+  Object.freeze(Config);  // lock this all-constant object to prevent changes
+}
+
+
+var LabelPosition = {  // this is a custom enum that must match the options in the LABELPOSITION item above
+    ABOVE : "ABOVE",
+    LEFT  : "LEFT",
+    BELOW : "BELOW",
+    RIGHT : "RIGHT",
+    DEFAULT : "DEFAULT"
+  };
+if (Object.freeze) {
+  Object.freeze(LabelPosition);  // lock this enum object to prevent changes
+}
+
+
+var activeState = // Bad design, but this is needed for transfer of control from createLegend() to geolocate()
+    {
+      map : null,
+      markerArrays : null, // Ugh, design is really getting loose
+      vanRoutes : null, // Same comment above
+      showGeolocate : false,
+      showBathrooms : false,
+      showVanRoutes : false,
+      geolocationMarker : null
+    };
+
+
+
+function colorIcon(icon, color) {
+    return {
+        path: icon.path,
+        scale: icon.scale,
+        strokeWeight: icon.strokeWeight,
+        fillColor: icon.fillColor,
+        fillOpacity: icon.fillOpacity,
+        strokeColor: color
+    };
+}
+
+
+
+// options structure: position, icon, labelContent, labelPosition, labelStyle, mouseoverText, infowindowText
+
+function getLabeledMarker(options, mapObject) {
+    var thisLabelStyle = options.labelStyle || { };
+
+    if (options.labelPosition === LabelPosition.LEFT) {
+        thisLabelStyle.textAlign = 'right';
+    } else if (options.labelPosition === LabelPosition.RIGHT || options.labelPosition === LabelPosition.DEFAULT) {
+        thisLabelStyle.textAlign = 'left';
+    } else {
+        thisLabelStyle.textAlign = 'center';
+    }
+
+    var marker = new MarkerWithLabel({
+       position: options.position,
+       map: mapObject,
+       icon: options.icon,
+       draggable: false,
+       raiseOnDrag: false,
+       labelContent: options.labelContent,
+       labelAnchor: Config.LABELPOSITION[options.labelPosition] || Config.LABELPOSITION["DEFAULT"],
+       labelClass: 'labels',
+       labelInBackground: true,
+       labelStyle: thisLabelStyle,
+       opacity: options.strokeOpacity,
+       title: options.mouseoverText
+      });
+
+    if (options.infowindowText) {
+        var iw = new google.maps.InfoWindow({
+            content: options.infowindowText
+          });
+        google.maps.event.addListener(marker, "click", function (e) { iw.open(mapObject, this); });
+
+        if (Config.INFOWINDOW_TIMEOUT) {  // If the configuration timeout is > 0, have the window close after mouse is removed
+            google.maps.event.addListener(marker, "mouseout", 
+                function (e) { 
+                    setTimeout(function () { iw.close(); }, Config.INFOWINDOW_TIMEOUT);  // This closes the infowindow (if open) a short amount of time after removing mouse
+                }
+              );
+        }
+    }
+
+    return marker;
+}
+
+
+  function plotPointArrayKMLStrings3(arrayOfLngLatStrings, mapObject) {
+      var coloredIcon = colorIcon(Config.ICON["CIRCLE"].medium, Config.PATHSTYLE["ROAD_OPEN"].foregroundColor);
+
+      for (var i = 0; i < arrayOfLngLatStrings.length; i++) {
+
+          if (!arrayOfLngLatStrings[i]) {
+              continue;  // if value is undefined, skip it
+          }
+
+          var lngLatArray = arrayOfLngLatStrings[i].split(',');    
+          var label = (lngLatArray.length < 4) ? (i+'') : lngLatArray[3];
+
+          var markerOptions = {
+                position : new google.maps.LatLng(lngLatArray[1], lngLatArray[0]), // KML style lists lng first then lat
+                icon : coloredIcon,
+                labelContent : label,
+                labelPosition : LabelPosition.DEFAULT,
+                labelStyle : { 
+                    color : Config.PATHSTYLE["ROAD_OPEN"].labelColor,
+                    fontSize : Config.LABELFONT.medium,
+                    opacity : Config.OPACITY["LABEL"]
+                },
+                mouseoverText : label + 'x', 
+                infowindowText : label + ': (' + lngLatArray[0] + ', ' + lngLatArray[1] + ')'
+              };
+
+          getLabeledMarker(markerOptions, mapObject);
+      }
+  }
+
+
+// Signature: addPolyline(linePathArray, mapObject, lineOptions)
+// lineOptions members:  strokeOpacity, strokeWeight, strokeColor, optional icons[], optional infowindowText
+// icons[] must have member objects of the form { icon(==path), offset=='0', repeat=='15px' for normal, '12px' for tight ]
+
+function addPolyline(linePathArray, mapObject, lineOptions) {
+    var polyLine = new google.maps.Polyline({
+        path: linePathArray,
+        strokeOpacity: lineOptions.strokeOpacity,
+        icons: lineOptions.icons || [ ],
+        strokeColor: lineOptions.strokeColor || Colors.BLACK,
+        strokeWeight: lineOptions.strokeWeight || 1.0,
+        map: mapObject
+      });
+
+    if (lineOptions.infowindowText) {
+        var iw = new google.maps.InfoWindow({
+            content: lineOptions.infowindowText
+          });
+        google.maps.event.addListener(polyLine, 'click', 
+            function(event) { 
+                iw.setPosition(event.latLng);
+                iw.open(mapObject, this); 
+            }
+          );
+
+        if (Config.INFOWINDOW_TIMEOUT) {  // If the configuration timeout is > 0, have the window close after mouse is removed
+            google.maps.event.addListener(polyLine, "mouseout", 
+                function (e) { 
+                    setTimeout(function () { iw.close(); }, Config.INFOWINDOW_TIMEOUT);  // This closes the infowindow (if open) a short amount of time after removing mouse
+                }
+              );
+        }
+    }
+
+    return polyLine;
+}
+
+
+function addStyledLine(linePathArray, mapObject, pathStyleName, titleText) {
+    var thisPathStyle = Config.PATHSTYLE[pathStyleName] || Config.PATHSTYLE["DEFAULT"];
+
+    var lineOptions = { };
+
+    // lineOptions composition is very different depending on whether the pathstyle is dashed or not
+
+    var thisLineScale = thisPathStyle.scale || Config.DEFAULT_LINESCALE;
+
+    if (thisPathStyle.dashOptions) {
+        var dashedLineSymbol = {
+            path: thisPathStyle.dashOptions.path,
+            strokeColor: thisPathStyle.foregroundColor,
+            strokeOpacity: thisPathStyle.foregroundOpacity,
+            scale: thisLineScale
+          };
+
+        lineOptions.strokeColor = thisPathStyle.backgroundColor;
+        lineOptions.strokeWeight = thisLineScale * 2;
+        lineOptions.strokeOpacity = Config.OPACITY["BACKGROUND"];
+        lineOptions.icons = [{
+            icon: dashedLineSymbol,
+            offset: '100%',
+            repeat: thisPathStyle.dashOptions.repeat
+          }];
+    } else {
+        lineOptions.strokeColor = thisPathStyle.foregroundColor;
+        lineOptions.strokeWeight = thisLineScale;
+        lineOptions.strokeOpacity = thisPathStyle.foregroundOpacity;
+    }
+
+    // If titleText is defined, include it among the options.
+    if (titleText) {
+        lineOptions.infowindowText = titleText;
+    }
+
+    return addPolyline(linePathArray, mapObject, lineOptions);
+}
+
+
+// Global variables in the 'document' namespace. It would be ideal if they had their own namespace, but not practical given the source of the configuration data in getMarkerConfigs.
+var MARKER_LARGE=0, MARKER_SMALL=1;
+
+function getMarkerConfigs() {
+    // Paste configuration data inside the returned array.
+    return [
+        { latLngString: '40.721700, -73.950650', size: MARKER_LARGE, labelString: '0.0', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>0.00</b><small> (GPS 40.7217, -73.9507)</small>: START<br><div style='width:200px'>Start by heading northeast on Driggs</div>", mouseoverText: '0.0 START: Start by heading northeast on Driggs', majorLabel: '0'  }, 
+        { latLngString: '40.722170, -73.949870', size: MARKER_SMALL, labelString: '0.1', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>0.08</b>: LEFT<br><div style='width:200px'>Left onto Manhattan Ave</div>", mouseoverText: '0.1 LEFT: Left onto Manhattan Ave'  }, 
+        { latLngString: '40.730190, -73.954250', size: MARKER_SMALL, labelString: '0.7', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>0.68</b>: RIGHT<br><div style='width:200px'>Right onto Greenpoint Ave</div>", mouseoverText: '0.7 RIGHT: Right onto Greenpoint Ave'  }, 
+        { latLngString: '40.730450, -73.951570', size: MARKER_SMALL, labelString: '0.8', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>0.78</b>: LEFT<br><div style='width:200px'>Left onto McGuinness Blvd </div>", mouseoverText: '0.8 LEFT: Left onto McGuinness Blvd '  }, 
+        { latLngString: '40.735340, -73.952660', size: MARKER_SMALL, labelString: '1.1', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>1.14</b>: STRAIGHT<br><div style='width:200px'>At Eagle St, enter Pulaski Bridge Pedestrian Path (left/west side of bridge)</div>", mouseoverText: '1.1 STRAIGHT: Pulaski Bridge Pedetrian Path'  }, 
+        { latLngString: '40.742790, -73.951510', size: MARKER_SMALL, labelString: '1.8', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>1.78</b>: STRAIGHT<br><div style='width:200px'>At base of Pulaski Bridge, cross Jackson Ave, continue straight (north) on 11th St</div>", mouseoverText: '1.8 STRAIGHT: Continue on 11th St'  }, 
+        { latLngString: '40.748540, -73.949640', size: MARKER_SMALL, labelString: '2.2', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>2.18</b>: RIGHT<br><div style='width:200px'>Right onto 44th Dr</div>", mouseoverText: '2.2 RIGHT: Right onto 44th Dr'  }, 
+        { latLngString: '40.747640, -73.945070', size: MARKER_SMALL, labelString: '2.4', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>2.38</b>: LEFT<br><div style='width:200px'>Left onto 23rd St</div>", mouseoverText: '2.4 LEFT: Left onto 23rd St'  }, 
+        { latLngString: '40.751590, -73.941840', size: MARKER_SMALL, labelString: '2.7', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>2.68</b>: RIGHT<br><div style='width:200px'>Right on Queensboro Plaza North immediately after crossing under Queensboro Bridge</div>", mouseoverText: '2.7 RIGHT: Queensboro Plaza North'  }, 
+        { latLngString: '40.751010, -73.940560', size: MARKER_SMALL, labelString: '2.8', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>2.78</b>: U-TURN RIGHT<br><div style='width:200px'>U-Turn right onto Queensboro Bridge pedestrian/bike path. Follow to end of pedestrian path at 1st Ave</div>", mouseoverText: '2.8 U-TURN RIGHT: Queensboro Bridge Pedestrian Path'  }, 
+        { latLngString: '40.760309, -73.961603', size: MARKER_LARGE, labelString: '4.2', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>4.18</b><small> (GPS 40.7603, -73.9616)</small>: U-TURN LEFT<br><div style='width:200px'>At base of Queensboro Bridge pedestrian/bike path, U-Turn left onto E 60th St</div>", mouseoverText: '4.2 U-TURN LEFT: Head westward on E 60th St'  }, 
+        { latLngString: '40.765120, -73.973070', size: MARKER_LARGE, labelString: '4.9', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>4.88</b><small> (GPS 40.7651, -73.9731)</small>: RIGHT<br><div style='width:200px'>Right on Central Park East Dr shortly after crossing 5th Ave / Grand Army Plaza</div>", mouseoverText: '4.9 RIGHT: Central Park East Drive'  }, 
+        { latLngString: '40.769450, -73.972470', size: MARKER_SMALL, labelString: '5.2', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>5.18</b>: RIGHT<br><div style='width:200px'>Slight right to stay on Central Park East Dr</div>", mouseoverText: '5.2 RIGHT: Central Park East Drive'  }, 
+        { latLngString: '40.773310, -73.968990', size: MARKER_SMALL, labelString: '5.6', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>5.58</b>: LEFT<br><div style='width:200px'>Slight left onto Terrace Dr / 72nd St Transverse. Follow to end of Terrace Dr at Central Park West</div>", mouseoverText: '5.6 LEFT: Terrace Dr/ 72nd St Transverse'  }, 
+        { latLngString: '40.776160, -73.975940', size: MARKER_SMALL, labelString: '6.1', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>6.08</b>: STRAIGHT<br><div style='width:200px'>Continue straight (westbound) onto W 72nd St</div>", mouseoverText: '6.1 STRAIGHT: Continue on W 72nd St'  }, 
+        { latLngString: '40.780310, -73.985783', size: MARKER_LARGE, labelString: '6.7', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>6.68</b><small> (GPS 40.7803, -73.9858)</small>: RIGHT<br><div style='width:200px'>Right to enter Riverside Park at 72nd St and Riverside Dr. Follow path westward toward the river</div>", mouseoverText: '6.7 RIGHT: Enter Riverside Park'  }, 
+        { latLngString: '40.781800, -73.987900', size: MARKER_SMALL, labelString: '6.9', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>6.88</b>: RIGHT<br><div style='width:200px'>Right onto Hudson River Greenway, running next to Hudson River</div>", mouseoverText: '6.9 RIGHT: Hudson River Greenway'  }, 
+        { latLngString: '40.818818, -73.961318', size: MARKER_LARGE, labelString: '9.8', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>9.78</b><small> (GPS 40.8188, -73.9613)</small>: STRAIGHT<br><div style='width:200px'>Continue on Hudson River Greenway passing W 125th St</div>", mouseoverText: '9.8 STRAIGHT: Passing W 125th St', majorLabel: '10'  }, 
+        { latLngString: '40.834490, -73.949960', size: MARKER_LARGE, labelString: '11.1', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>11.07</b><small> (GPS 40.8345, -73.9500)</small>: STRAIGHT<br><div style='width:200px'>Continue on Hudson River Greenway passing W 155th St exit</div>", mouseoverText: '11.1 STRAIGHT: Passing W 155th St'  }, 
+        { latLngString: '40.839470, -73.948110', size: MARKER_SMALL, labelString: '11.4', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>11.35</b>: RIGHT<br><div style='width:200px'>Bear right at fork in Hudson River Greenway path. You should have railroad tracks on your immediate right, and athletic fields to your left</div>", mouseoverText: '11.4 RIGHT: Bear right at fork'  }, 
+        { latLngString: '40.852540, -73.941620', size: MARKER_LARGE, labelString: '12.6', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>12.64</b><small> (GPS 40.8525, -73.9416)</small>: STRAIGHT<br><div style='width:200px'>Continue on Hudson River Greenway passing W 181st St exit</div>", mouseoverText: '12.6 STRAIGHT: Passing W 181st St'  }, 
+        { latLngString: '40.868850, -73.931230', size: MARKER_SMALL, labelString: '14.1', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>14.08</b>: LEFT<br><div style='width:200px'>Left onto Dyckman St</div>", mouseoverText: '14.1 LEFT: Left onto Dyckman St'  }, 
+        { latLngString: '40.869090, -73.931520', size: MARKER_LARGE, labelString: '14.1', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>14.11</b><small> (GPS 40.8691, -73.9315)</small>: RIGHT<br><div style='width:200px'>Right onto Greenway at end of Dyckman St, just before marina</div>", mouseoverText: '14.1 RIGHT: Washington Heights Greenway'  }, 
+        { latLngString: '40.873770, -73.929590', size: MARKER_SMALL, labelString: '14.4', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>14.43</b>: RIGHT<br><div style='width:200px'>Take the stairs heading north, then right to head east over railroad tracks, staying on Greenway</div>", mouseoverText: '14.4 RIGHT: Stairs up and to the right'  }, 
+        { latLngString: '40.876980, -73.923760', size: MARKER_SMALL, labelString: '14.9', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>14.88</b>: STRAIGHT<br><div style='width:200px'>Continue on Greenway as it passes under elevated Henry Hudson Parkway Bridge</div>", mouseoverText: '14.9 STRAIGHT: Under Henry Hudson Parkway'  }, 
+        { latLngString: '40.873530, -73.923950', size: MARKER_SMALL, labelString: '15.2', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>15.18</b>: LEFT<br><div style='width:200px'>Sharp left on Greenway to continue going north/east toward W 218th St</div>", mouseoverText: '15.2 LEFT: Keep going Northward/Eastward'  }, 
+        { latLngString: '40.873020, -73.918460', size: MARKER_LARGE, labelString: '15.5', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>15.51</b><small> (GPS 40.8730, -73.9185)</small>: STRAIGHT<br><div style='width:200px'>Continue straight (eastbound) onto W 218th St</div>", mouseoverText: '15.5 STRAIGHT: Continue on W 218th St'  }, 
+        { latLngString: '40.871133, -73.913902', size: MARKER_SMALL, labelString: '15.8', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>15.81</b>: LEFT<br><div style='width:200px'>Left onto Broadway / US 9 (cross underneath elevated subway tracks and run on RIGHT side of street, with traffic)</div>", mouseoverText: '15.8 LEFT: Broadway / US 9'  }, 
+        { latLngString: '40.886558, -73.899615', size: MARKER_SMALL, labelString: '17.1', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>17.11</b>: RIGHT<br><div style='width:200px'>Right onto Van Cortlandt Park S </div>", mouseoverText: '17.1 RIGHT: Right onto Van Cortlandt Park S '  }, 
+        { latLngString: '40.886152, -73.897419', size: MARKER_LARGE, labelString: '17.2', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>17.21</b><small> (GPS 40.8862, -73.8974)</small>: LEFT<br><div style='width:200px'>Left to enter Van Cortlandt Park (across street from W Putnam Ave) on John Kieran Nature Trail. CHECKPOINT #1: Van Cortlandt Park track is just north of here</div>", mouseoverText: '17.2 LEFT: Enter Van Cortlandt Park'  }, 
+        { latLngString: '40.888770, -73.894500', size: MARKER_SMALL, labelString: '17.5', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>17.47</b>: RIGHT<br><div style='width:200px'>Right onto John Kieran Nature Trail</div>", mouseoverText: '17.5 RIGHT: Right onto John Kieran Nature Trail'  }, 
+        { latLngString: '40.889060, -73.893320', size: MARKER_SMALL, labelString: '17.5', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>17.51</b>: LEFT-RIGHT<br><div style='width:200px'>Left, then immediate right, to enter Old Putnam Trail</div>", mouseoverText: '17.5 LEFT-RIGHT: Left, then immediate right, to enter Old Putnam Trail'  }, 
+        { latLngString: '40.907860, -73.884780', size: MARKER_SMALL, labelString: '19.0', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>19.01</b>: STRAIGHT<br><div style='width:200px'>Continue on South County Trailway. Leaving Bronx, entering Westchester County</div>", mouseoverText: '19.0 STRAIGHT: Continue on South County Trailway'  }, 
+        { latLngString: '40.926280, -73.879880', size: MARKER_SMALL, labelString: '20.3', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>20.33</b>: STRAIGHT<br><div style='width:200px'>Continue on S County Trailway passing exit for Tibbetts Brook Park</div>", mouseoverText: '20.3 STRAIGHT: Passing Tibbetts Brook Park'  }, 
+        { latLngString: '40.932430, -73.875480', size: MARKER_LARGE, labelString: '20.9', pathStyle: 'TRAIL_PAVED', labelPosition: 'BELOW', labelDetails: "<b>20.89</b><small> (GPS 40.9324, -73.8755)</small>: STRAIGHT<br><div style='width:200px'>Continue on S County Trailway passing Yonkers Gateway Hotel</div>", mouseoverText: '20.9 STRAIGHT: Passing Yonkers Gateway Hotel', majorLabel: '20'  }, 
+        { latLngString: '40.942460, -73.861080', size: MARKER_SMALL, labelString: '21.9', pathStyle: 'TRAIL_PAVED', labelPosition: 'BELOW', labelDetails: "<b>21.91</b>: STRAIGHT<br><div style='width:200px'>Continue on S County Trailway crossing Mile Square Rd</div>", mouseoverText: '21.9 STRAIGHT: Crossing Mile Square Rd'  }, 
+        { latLngString: '40.944670, -73.857810', size: MARKER_LARGE, labelString: '22.2', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>22.16</b><small> (GPS 40.9447, -73.8578)</small>: STRAIGHT<br><div style='width:200px'>Continue on S County Trailway passing access point just south of Palmer Rd</div>", mouseoverText: '22.2 STRAIGHT: Passing Palmer Rd access point'  }, 
+        { latLngString: '40.955400, -73.866630', size: MARKER_LARGE, labelString: '23.3', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>23.25</b><small> (GPS 40.9554, -73.8666)</small>: STRAIGHT<br><div style='width:200px'>Continue on S County Trailway passing access point just south of Tuckahoe Rd</div>", mouseoverText: '23.3 STRAIGHT: Passing Tuckahoe Rd access point'  }, 
+        { latLngString: '40.974200, -73.867750', size: MARKER_SMALL, labelString: '24.6', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>24.61</b>: STRAIGHT<br><div style='width:200px'>Continue on S County Trailway crossing Hearst St/Gray Oaks Ave (Yonkers Carpet & Linoleum)</div>", mouseoverText: '24.6 STRAIGHT: Crossing Grey Oaks Ave'  }, 
+        { latLngString: '40.976270, -73.867600', size: MARKER_LARGE, labelString: '24.7', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>24.71</b><small> (GPS 40.9763, -73.8676)</small>: STRAIGHT<br><div style='width:200px'>Continue on S County Trailway passing access point at Barney St</div>", mouseoverText: '24.7 STRAIGHT: Crossing Barney St'  }, 
+        { latLngString: '40.978791, -73.867503', size: MARKER_SMALL, labelString: '24.9', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>24.91</b>: STRAIGHT<br><div style='width:200px'>Continue on S County Trailway crossing Tompkins Ave</div>", mouseoverText: '24.9 STRAIGHT: Crossing Tompkins Ave'  }, 
+        { latLngString: '40.983170, -73.866250', size: MARKER_SMALL, labelString: '25.2', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>25.21</b>: STRAIGHT<br><div style='width:200px'>Continue on S County Trailway crossing Farragut Ave</div>", mouseoverText: '25.2 STRAIGHT: Crossing Farragut Ave'  }, 
+        { latLngString: '40.996057, -73.859867', size: MARKER_LARGE, labelString: '26.2', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>26.17</b><small> (GPS 40.9961, -73.8599)</small>: STRAIGHT<br><div style='width:200px'>Continue on S County Trailway passing access point at The Lofts Apartment Complex, 425 Saw Mill River Rd, Hastings-on-Hudson</div>", mouseoverText: '26.2 STRAIGHT: Passing The Lofts Apartment Complex'  }, 
+        { latLngString: '41.002183, -73.855897', size: MARKER_SMALL, labelString: '26.6', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>26.61</b>: STRAIGHT<br><div style='width:200px'>Continue on S County Trailway crossing Lawrence St</div>", mouseoverText: '26.6 STRAIGHT: Crossing Lawrence St'  }, 
+        { latLngString: '41.010135, -73.851740', size: MARKER_LARGE, labelString: '27.2', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>27.19</b><small> (GPS 41.0101, -73.8517)</small>: STRAIGHT<br><div style='width:200px'>Continue on S County Trailway passing access point behind House of Sports, 1 Elm St, Ardsley</div>", mouseoverText: '27.2 STRAIGHT: Passing House of Sports'  }, 
+        { latLngString: '41.025460, -73.843930', size: MARKER_SMALL, labelString: '28.2', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>28.21</b>: STRAIGHT<br><div style='width:200px'>Continue on S County Trailway passing Great Hunger Memorial Park</div>", mouseoverText: '28.2 STRAIGHT: Passing Great Hunger Memorial'  }, 
+        { latLngString: '41.053162, -73.821529', size: MARKER_LARGE, labelString: '30.7', pathStyle: 'TRAIL_PAVED', labelPosition: 'BELOW', labelDetails: "<b>30.71</b><small> (GPS 41.0532, -73.8215)</small>: STRAIGHT<br><div style='width:200px'>Continue on S County Trailway passing access point at Van Wart St</div>", mouseoverText: '30.7 STRAIGHT: Passing Van Wart St access point', majorLabel: '30'  }, 
+        { latLngString: '41.055224, -73.820356', size: MARKER_SMALL, labelString: '30.8', pathStyle: 'TRAIL_PAVED', labelPosition: 'RIGHT', labelDetails: "<b>30.81</b>: LEFT<br><div style='width:200px'>Left onto W Main St</div>", mouseoverText: '30.8 LEFT: Left onto W Main St'  }, 
+        { latLngString: '41.055450, -73.820790', size: MARKER_SMALL, labelString: '30.8', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>30.83</b>: RIGHT<br><div style='width:200px'>Right to enter North Country Trailway (between Saw Mill River, the body fo water, and entrance ramp onto Saw Mill River Parkway)</div>", mouseoverText: '30.8 RIGHT: Enter North Country Trailway'  }, 
+        { latLngString: '41.063650, -73.819100', size: MARKER_SMALL, labelString: '31.4', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>31.43</b>: STRAIGHT<br><div style='width:200px'>Continue on N County Trailway as it crosses Warehouse Ln and (0.4M later) Ridge Wood Dr</div>", mouseoverText: '31.4 STRAIGHT: Cross Warehouse Rd and Ridge Wood Rd'  }, 
+        { latLngString: '41.080060, -73.829570', size: MARKER_LARGE, labelString: '33.1', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>33.13</b><small> (GPS 41.0801, -73.8296)</small>: STRAIGHT<br><div style='width:200px'>Continue on N County Trailway passing access point just south of Old Saw River Rd / NY-303</div>", mouseoverText: '33.1 STRAIGHT: Passing Old Saw River Rd / NY-303 access point'  }, 
+        { latLngString: '41.123220, -73.810700', size: MARKER_LARGE, labelString: '36.5', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>36.53</b><small> (GPS 41.1232, -73.8107)</small>: STRAIGHT<br><div style='width:200px'>Continue on N County Trailway passing access point at Bedford Rd / NY-117</div>", mouseoverText: '36.5 STRAIGHT: Passing Bedford Rd / NY-117 access point'  }, 
+        { latLngString: '41.146393, -73.824113', size: MARKER_LARGE, labelString: '38.3', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>38.33</b><small> (GPS 41.1464, -73.8241)</small>: STRAIGHT<br><div style='width:200px'>Continue on N County Trailway passing access point at Briarcliff Manor Public Library</div>", mouseoverText: '38.3 STRAIGHT: Passing Briarcliff Manor Public Library'  }, 
+        { latLngString: '41.148590, -73.825130', size: MARKER_SMALL, labelString: '38.4', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>38.43</b>: STRAIGHT<br><div style='width:200px'>Trail ends temporarily.  Continue north on NY-100/Saw Mill River Rd for half a mile, looking for new trail entrance on the right side of the road. Use caution! Runners should stay on left side, facing traffic</div>", mouseoverText: '38.4 STRAIGHT: Continue north on NY-100/Saw Mill River Rd'  }, 
+        { latLngString: '41.155400, -73.824640', size: MARKER_SMALL, labelString: '38.9', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>38.93</b>: RIGHT<br><div style='width:200px'>Bear right onto N County Trailway entrance. (Look for \'Bike Route\' sign to mark trail.)</div>", mouseoverText: '38.9 RIGHT: Bear right onto N County Trailway entrance'  }, 
+        { latLngString: '41.159940, -73.820740', size: MARKER_SMALL, labelString: '39.2', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>39.22</b>: STRAIGHT<br><div style='width:200px'>Continue on N County Trailway crossing Chappaqua Rd</div>", mouseoverText: '39.2 STRAIGHT: Crossing Chappaqua Rd'  }, 
+        { latLngString: '41.175770, -73.812090', size: MARKER_LARGE, labelString: '40.5', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>40.53</b><small> (GPS 41.1758, -73.8121)</small>: STRAIGHT<br><div style='width:200px'>Trail ends temporarily at N State Rd trail access parking. Continue north on Saw Mill River Rd/NY-100/NY-133. Use caution! Runners should stay on left side, facing traffic</div>", mouseoverText: '40.5 STRAIGHT: Continue north on Saw Mill River Rd/NY-100/NY-133', majorLabel: '40'  }, 
+        { latLngString: '41.186315, -73.805863', size: MARKER_SMALL, labelString: '41.3', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>41.33</b>: RIGHT<br><div style='width:200px'>Right onto N County Trailway entrance just past Campfire Rd</div>", mouseoverText: '41.3 RIGHT: Right onto N County Trailway entrance just past Campfire Rd'  }, 
+        { latLngString: '41.186940, -73.800590', size: MARKER_LARGE, labelString: '41.6', pathStyle: 'TRAIL_PAVED', labelPosition: 'BELOW', labelDetails: "<b>41.64</b><small> (GPS 41.1869, -73.8006)</small>: STRAIGHT<br><div style='width:200px'>Continue on N County Trailway passing access point at Station Rd</div>", mouseoverText: '41.6 STRAIGHT: Passing Station Rd access point'  }, 
+        { latLngString: '41.189860, -73.796710', size: MARKER_SMALL, labelString: '41.9', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>41.93</b>: STRAIGHT<br><div style='width:200px'>Continue on N County Trailway crossing NY-133/NY-120/Millwood Rd</div>", mouseoverText: '41.9 STRAIGHT: Crossing NY-133/NY-120/Millwood Rd'  }, 
+        { latLngString: '41.227550, -73.776810', size: MARKER_LARGE, labelString: '42.6', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>42.62</b><small> (GPS 41.2276, -73.7768)</small>: STRAIGHT<br><div style='width:200px'>Continue on N County Trailway crossing wooden pedestrian bridge over New Croton Reservoir. (Park at North Country Trail Parking just north, on NY-118/Saw Mill River Rd.) CHECKPOINT #2</div>", mouseoverText: '42.6 STRAIGHT: Crossing wooden pedestrian bridge over New Croton Reservoir'  }, 
+        { latLngString: '41.230190, -73.778040', size: MARKER_SMALL, labelString: '44.9', pathStyle: 'TRAIL_PAVED', labelPosition: 'ABOVE', labelDetails: "<b>44.93</b>: STRAIGHT<br><div style='width:200px'>Continue on N County Trailway crossing NY-118/Saw Mill River Rd</div>", mouseoverText: '44.9 STRAIGHT: Crossing NY-118/Saw Mill River Rd'  }, 
+        { latLngString: '41.234227, -73.782781', size: MARKER_SMALL, labelString: '45.3', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>45.31</b>: STRAIGHT<br><div style='width:200px'>Continue on N County Trailway crossing Birdsall Dr</div>", mouseoverText: '45.3 STRAIGHT: Crossing Birdsall Dr'  }, 
+        { latLngString: '41.253630, -73.788180', size: MARKER_SMALL, labelString: '46.8', pathStyle: 'TRAIL_PAVED', labelPosition: 'BELOW', labelDetails: "<b>46.83</b>: STRAIGHT<br><div style='width:200px'>Continue on N County Trailway crossing Revere Dr</div>", mouseoverText: '46.8 STRAIGHT: Crossing Revere Dr'  }, 
+        { latLngString: '41.270880, -73.780110', size: MARKER_LARGE, labelString: '48.1', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>48.13</b><small> (GPS 41.2709, -73.7801)</small>: STRAIGHT<br><div style='width:200px'>Continue on N County Trailway crossing Underhill Ave aka Kear St</div>", mouseoverText: '48.1 STRAIGHT: Crossing Underhill Ave'  }, 
+        { latLngString: '41.273810, -73.779590', size: MARKER_SMALL, labelString: '48.3', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>48.33</b>: STRAIGHT<br><div style='width:200px'>Continue on N County Trailway crossing Hanover St</div>", mouseoverText: '48.3 STRAIGHT: Crossing Hanover St'  }, 
+        { latLngString: '41.276940, -73.775340', size: MARKER_SMALL, labelString: '48.6', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>48.63</b>: STRAIGHT<br><div style='width:200px'>Continue on N County Trailway crossing Northmore Dr</div>", mouseoverText: '48.6 STRAIGHT: Crossing Northmore Dr'  }, 
+        { latLngString: '41.286160, -73.770280', size: MARKER_LARGE, labelString: '49.3', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>49.33</b><small> (GPS 41.2862, -73.7703)</small>: STRAIGHT<br><div style='width:200px'>Continue on N County Trailway crossing Saw Mill River Rd/US-202/NY-118</div>", mouseoverText: '49.3 STRAIGHT: Crossing Saw Mill River Rd/US-202/NY-118', majorLabel: '50'  }, 
+        { latLngString: '41.307810, -73.764170', size: MARKER_SMALL, labelString: '50.9', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>50.93</b>: STRAIGHT<br><div style='width:200px'>Continue on N County Trailway crossing Granite Springs Rd</div>", mouseoverText: '50.9 STRAIGHT: Crossing Granite Springs Rd'  }, 
+        { latLngString: '41.315130, -73.761740', size: MARKER_SMALL, labelString: '51.4', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>51.43</b>: STRAIGHT<br><div style='width:200px'>Continue on N County Trailway crossing Mahopac Ave</div>", mouseoverText: '51.4 STRAIGHT: Crossing Mahopac Ave'  }, 
+        { latLngString: '41.345250, -73.754570', size: MARKER_LARGE, labelString: '53.6', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>53.63</b><small> (GPS 41.3453, -73.7546)</small>: STRAIGHT<br><div style='width:200px'>Continue on Putnam Trailway crossing Tomahawk St/NY-118. Entering Putnam County</div>", mouseoverText: '53.6 STRAIGHT: Crossing Tomahawk St/NY-118'  }, 
+        { latLngString: '41.347860, -73.752750', size: MARKER_SMALL, labelString: '53.8', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>53.84</b>: STRAIGHT<br><div style='width:200px'>Continue on Putnam Trailway crossing Miller Rd</div>", mouseoverText: '53.8 STRAIGHT: Crossing Miller Rd'  }, 
+        { latLngString: '41.352430, -73.747270', size: MARKER_SMALL, labelString: '54.2', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>54.23</b>: STRAIGHT<br><div style='width:200px'>Continue on Putnam Trailway crossing Union Valley Rd</div>", mouseoverText: '54.2 STRAIGHT: Crossing Union Valley Rd'  }, 
+        { latLngString: '41.362484, -73.744664', size: MARKER_SMALL, labelString: '55.0', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>54.95</b>: STRAIGHT<br><div style='width:200px'>Continue on Putnam Trailway crossing Battista Dr</div>", mouseoverText: '55.0 STRAIGHT: Crossing Battista Dr'  }, 
+        { latLngString: '41.367675, -73.739592', size: MARKER_SMALL, labelString: '55.4', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>55.43</b>: STRAIGHT<br><div style='width:200px'>Continue on Putnam Trailway crossing Bucks Hollow Rd (first time)</div>", mouseoverText: '55.4 STRAIGHT: Crossing Bucks Hollow Rd (first time)'  }, 
+        { latLngString: '41.371890, -73.733980', size: MARKER_LARGE, labelString: '55.9', pathStyle: 'TRAIL_PAVED', labelPosition: 'BELOW', labelDetails: "<b>55.85</b><small> (GPS 41.3719, -73.7340)</small>: STRAIGHT<br><div style='width:200px'>Continue on Putnam Trailway crossing Bucks Hollow Rd (second time)</div>", mouseoverText: '55.9 STRAIGHT: Crossing Bucks Hollow Rd (second time)'  }, 
+        { latLngString: '41.372710, -73.730850', size: MARKER_SMALL, labelString: '56.0', pathStyle: 'TRAIL_PAVED', labelPosition: 'ABOVE', labelDetails: "<b>56.03</b>: STRAIGHT<br><div style='width:200px'>Continue on Putnam Trailway crossing Kings Row and Mt Hope Rd</div>", mouseoverText: '56.0 STRAIGHT: Crossing Kings Row and Mt Hope Rd'  }, 
+        { latLngString: '41.377480, -73.725070', size: MARKER_SMALL, labelString: '56.5', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>56.53</b>: STRAIGHT<br><div style='width:200px'>Continue on Putnam Trailway crossing Croton Falls Rd/NY-34</div>", mouseoverText: '56.5 STRAIGHT: Crossing Croton Falls Rd/NY-34'  }, 
+        { latLngString: '41.377950, -73.723040', size: MARKER_LARGE, labelString: '56.6', pathStyle: 'TRAIL_PAVED', labelPosition: 'BELOW', labelDetails: "<b>56.64</b><small> (GPS 41.3780, -73.7230)</small>: STRAIGHT<br><div style='width:200px'>Continue on Putnam Trailway crossing Mud Pond Rd</div>", mouseoverText: '56.6 STRAIGHT: Crossing Mud Pond Rd'  }, 
+        { latLngString: '41.385210, -73.698270', size: MARKER_SMALL, labelString: '58.1', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>58.13</b>: STRAIGHT<br><div style='width:200px'>Continue on Putnam Trailway crossing Weber Hill Rd</div>", mouseoverText: '58.1 STRAIGHT: Crossing Weber Hill Rd'  }, 
+        { latLngString: '41.392720, -73.699320', size: MARKER_SMALL, labelString: '58.6', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>58.63</b>: STRAIGHT<br><div style='width:200px'>Continue on Putnam Trailway crossing Crafts Rd (at a diagonal)</div>", mouseoverText: '58.6 STRAIGHT: Crossing Crafts Rd'  }, 
+        { latLngString: '41.399000, -73.695060', size: MARKER_SMALL, labelString: '59.2', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>59.16</b>: STRAIGHT<br><div style='width:200px'>Continue on Putnam Trailway crossing Hickory Bend Rd</div>", mouseoverText: '59.2 STRAIGHT: Crossing Hickory Bend Rd'  }, 
+        { latLngString: '41.414615, -73.686290', size: MARKER_LARGE, labelString: '60.5', pathStyle: 'TRAIL_PAVED', labelPosition: 'BELOW', labelDetails: "<b>60.53</b><small> (GPS 41.4146, -73.6863)</small>: STRAIGHT<br><div style='width:200px'>Continue on Putnam Trailway passing trail access point at Willow Rd</div>", mouseoverText: '60.5 STRAIGHT: Passing Willow Rd access point ', majorLabel: '60'  }, 
+        { latLngString: '41.418940, -73.678920', size: MARKER_LARGE, labelString: '61.0', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>61.03</b><small> (GPS 41.4189, -73.6789)</small>: LEFT<br><div style='width:200px'>Exit Putnam Trailway to the left just before Seminary Hill Rd tunnel.  Left onto Seminary Hill Rd</div>", mouseoverText: '61.0 LEFT: Exit trail. Left onto Seminary Hill Rd'  }, 
+        { latLngString: '41.421840, -73.678400', size: MARKER_SMALL, labelString: '61.2', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>61.23</b>: STRAIGHT<br><div style='width:200px'>Continue onto Gleneida Ave</div>", mouseoverText: '61.2 STRAIGHT: Continue onto Gleneida Ave'  }, 
+        { latLngString: '41.426210, -73.678960', size: MARKER_SMALL, labelString: '61.5', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>61.53</b>: LEFT<br><div style='width:200px'>Left onto NY-301. Caution, 55 MPH! Run on left side, facing traffic</div>", mouseoverText: '61.5 LEFT: Left onto NY-301'  }, 
+        { latLngString: '41.429290, -73.699950', size: MARKER_LARGE, labelString: '62.8', pathStyle: 'ROAD_OPEN', labelPosition: 'ABOVE', labelDetails: "<b>62.78</b><small> (GPS 41.4293, -73.7000)</small>: STRAIGHT<br><div style='width:200px'>Continue on NY-301 passing NY-41/Gypsy Trail Rd. Caution, 55 MPH! Run on left side, facing traffic</div>", mouseoverText: '62.8 STRAIGHT: Passing NY-41/Gypsy Trail Rd'  }, 
+        { latLngString: '41.441210, -73.726350', size: MARKER_LARGE, labelString: '64.6', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>64.63</b><small> (GPS 41.4412, -73.7264)</small>: STRAIGHT<br><div style='width:200px'>Continue on NY-301/NY-47 passing Dixon Rd. Caution, 55 MPH! Run on left side, facing traffic</div>", mouseoverText: '64.6 STRAIGHT: Passing Dixon Rd'  }, 
+        { latLngString: '41.457010, -73.753440', size: MARKER_LARGE, labelString: '66.6', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>66.55</b><small> (GPS 41.4570, -73.7534)</small>: STRAIGHT<br><div style='width:200px'>Continue on NY-301/NY-47 passing Boyd\'s Corner Store (just north of Peekskill Hollow Rd). Caution, 55 MPH! Run on left side, facing traffic</div>", mouseoverText: '66.6 STRAIGHT: Passing Boyd\'s Corner Store'  }, 
+        { latLngString: '41.483040, -73.769540', size: MARKER_LARGE, labelString: '68.6', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>68.63</b><small> (GPS 41.4830, -73.7695)</small>: RIGHT<br><div style='width:200px'>Right on Farmers Mills Rd</div>", mouseoverText: '68.6 RIGHT: Right on Farmers Mills Rd'  }, 
+        { latLngString: '41.483700, -73.768410', size: MARKER_SMALL, labelString: '68.7', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>68.71</b>: LEFT<br><div style='width:200px'>Left onto Miller Hill Rd</div>", mouseoverText: '68.7 LEFT: Left onto Miller Hill Rd'  }, 
+        { latLngString: '41.510400, -73.781670', size: MARKER_LARGE, labelString: '70.9', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>70.92</b><small> (GPS 41.5104, -73.7817)</small>: STRAIGHT<br><div style='width:200px'>Continue on Miller Hill Rd passing Woodmont Rd. Entering Dutchess County</div>", mouseoverText: '70.9 STRAIGHT: Passing Woodmont Rd', majorLabel: '71'  }, 
+        { latLngString: '41.516500, -73.790160', size: MARKER_LARGE, labelString: '71.6', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>71.61</b><small> (GPS 41.5165, -73.7902)</small>: STRAIGHT<br><div style='width:200px'>Continue straight as road name changes to Shenandoah Rd passing Hortontown Rd</div>", mouseoverText: '71.6 STRAIGHT: Road name changes to Shenandoah Rd'  }, 
+        { latLngString: '41.537820, -73.804920', size: MARKER_LARGE, labelString: '73.6', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>73.61</b><small> (GPS 41.5378, -73.8049)</small>: RIGHT<br><div style='width:200px'>Right onto Blue Hill Rd</div>", mouseoverText: '73.6 RIGHT: Right onto Blue Hill Rd'  }, 
+        { latLngString: '41.552870, -73.797940', size: MARKER_LARGE, labelString: '74.7', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>74.71</b><small> (GPS 41.5529, -73.7979)</small>: RIGHT<br><div style='width:200px'>Right onto NY-52</div>", mouseoverText: '74.7 RIGHT: Right onto NY-52'  }, 
+        { latLngString: '41.553500, -73.795700', size: MARKER_SMALL, labelString: '74.8', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>74.81</b>: LEFT<br><div style='width:200px'>Left onto NY-376</div>", mouseoverText: '74.8 LEFT: Left onto NY-376'  }, 
+        { latLngString: '41.564150, -73.796770', size: MARKER_LARGE, labelString: '75.5', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>75.51</b><small> (GPS 41.5642, -73.7968)</small>: STRAIGHT<br><div style='width:200px'>Continue on NY-376 passing Probst Terrace</div>", mouseoverText: '75.5 STRAIGHT: Passing Probst Terrace'  }, 
+        { latLngString: '41.580260, -73.808790', size: MARKER_SMALL, labelString: '76.9', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>76.91</b>: RIGHT<br><div style='width:200px'>Right onto NY-82/NY-376</div>", mouseoverText: '76.9 RIGHT: Right onto NY-82/NY-376'  }, 
+        { latLngString: '41.581140, -73.807730', size: MARKER_SMALL, labelString: '77.0', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>76.99</b>: LEFT<br><div style='width:200px'>Left onto NY-376</div>", mouseoverText: '77.0 LEFT: Left onto NY-376'  }, 
+        { latLngString: '41.584177, -73.808731', size: MARKER_SMALL, labelString: '77.3', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>77.29</b>: RIGHT<br><div style='width:200px'>Right (essentially keep heading straight) onto Railroad Ave</div>", mouseoverText: '77.3 RIGHT: Keep going onto Railroad Ave'  }, 
+        { latLngString: '41.585050, -73.806415', size: MARKER_LARGE, labelString: '77.4', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>77.39</b><small> (GPS 41.5851, -73.8064)</small>: LEFT<br><div style='width:200px'>Left onto Dutchess Rail Trail at Hopewell Junction Railroad Station. CHECKPOINT #3</div>", mouseoverText: '77.4 LEFT: Left onto Dutchess Rail Trail', majorLabel: '77'  }, 
+        { latLngString: '41.586300, -73.811140', size: MARKER_SMALL, labelString: '77.7', pathStyle: 'TRAIL_PAVED', labelPosition: 'ABOVE', labelDetails: "<b>77.68</b>: STRAIGHT<br><div style='width:200px'>Continue on Dutchess Rail Trail crossing NY-376/Bridge St</div>", mouseoverText: '77.7 STRAIGHT: Crossing NY-376/Bridge St'  }, 
+        { latLngString: '41.601974, -73.835960', size: MARKER_SMALL, labelString: '79.5', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>79.49</b>: STRAIGHT<br><div style='width:200px'>Continue on Dutchess Rail Trail crossing Lake Walton Rd</div>", mouseoverText: '79.5 STRAIGHT: Crossing Lake Walton Rd'  }, 
+        { latLngString: '41.623520, -73.852030', size: MARKER_LARGE, labelString: '81.2', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>81.19</b><small> (GPS 41.6235, -73.8520)</small>: STRAIGHT<br><div style='width:200px'>Continue on Dutchess Rail Trail crossing Diddell Rd</div>", mouseoverText: '81.2 STRAIGHT: Crossing Diddell Rd'  }, 
+        { latLngString: '41.640221, -73.860030', size: MARKER_LARGE, labelString: '82.4', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>82.43</b><small> (GPS 41.6402, -73.8600)</small>: STRAIGHT<br><div style='width:200px'>Continue on Dutchess Rail Trail on overpass over Maloney Rd</div>", mouseoverText: '82.4 STRAIGHT: Overpass over Maloney Rd'  }, 
+        { latLngString: '41.650790, -73.857610', size: MARKER_SMALL, labelString: '83.1', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>83.14</b>: STRAIGHT<br><div style='width:200px'>Continue on Dutchess Rail Trail crossing unabeled private driveway</div>", mouseoverText: '83.1 STRAIGHT: Crossing unabeled private driveway'  }, 
+        { latLngString: '41.658110, -73.854820', size: MARKER_SMALL, labelString: '83.7', pathStyle: 'TRAIL_PAVED', labelPosition: 'BELOW', labelDetails: "<b>83.69</b>: STRAIGHT<br><div style='width:200px'>Continue on Dutchess Rail Trail on overpass over Titusville Rd/County Rd 49</div>", mouseoverText: '83.7 STRAIGHT: Overpass over Titusville Rd/County Rd 49'  }, 
+        { latLngString: '41.683520, -73.865990', size: MARKER_LARGE, labelString: '85.6', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>85.59</b><small> (GPS 41.6835, -73.8660)</small>: STRAIGHT<br><div style='width:200px'>Continue on Dutchess Rail Trail passing access point at Titusville Rd/Old Manchester Rd/County Rd 49</div>", mouseoverText: '85.6 STRAIGHT: Passing Titusville Rd/Old Manchester Rd/County Rd 49 access point'  }, 
+        { latLngString: '41.687310, -73.873230', size: MARKER_SMALL, labelString: '86.1', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>86.07</b>: STRAIGHT<br><div style='width:200px'>Continue on Dutchess Rail Trail crossing Page Park Dr</div>", mouseoverText: '86.1 STRAIGHT: Crossing Page Park Dr'  }, 
+        { latLngString: '41.693990, -73.884520', size: MARKER_LARGE, labelString: '86.8', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>86.79</b><small> (GPS 41.6940, -73.8845)</small>: STRAIGHT<br><div style='width:200px'>Continue on Dutchess Rail Trail crossing Overocker Rd</div>", mouseoverText: '86.8 STRAIGHT: Crossing Overocker Rd', majorLabel: '87'  }, 
+        { latLngString: '41.698390, -73.885710', size: MARKER_SMALL, labelString: '87.1', pathStyle: 'TRAIL_PAVED', labelPosition: 'LEFT', labelDetails: "<b>87.09</b>: STRAIGHT<br><div style='width:200px'>Continue on Dutchess Rail Trail passing Love Rd Trail Entrance</div>", mouseoverText: '87.1 STRAIGHT: Passing Love Rd access point'  }, 
+        { latLngString: '41.713480, -73.895960', size: MARKER_LARGE, labelString: '88.4', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>88.39</b><small> (GPS 41.7135, -73.8960)</small>: STRAIGHT<br><div style='width:200px'>Continue on Dutchess Rail Trail crossing N Grand Ave</div>", mouseoverText: '88.4 STRAIGHT: Crossing N Grand Ave'  }, 
+        { latLngString: '41.715370, -73.917800', size: MARKER_SMALL, labelString: '89.6', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>89.63</b>: STRAIGHT<br><div style='width:200px'>Continue on Dutchess Rail Trail crossing Buckingham Ave</div>", mouseoverText: '89.6 STRAIGHT: Crossing Buckingham Ave'  }, 
+        { latLngString: '41.711810, -73.926560', size: MARKER_LARGE, labelString: '90.1', pathStyle: 'TRAIL_PAVED', labelPosition: 'DEFAULT', labelDetails: "<b>90.09</b><small> (GPS 41.7118, -73.9266)</small>: STRAIGHT<br><div style='width:200px'>Enter Walkway Over the Hudson</div>", mouseoverText: '90.1 STRAIGHT: Enter Walkway Over the Hudson'  }, 
+        { latLngString: '41.710650, -73.954690', size: MARKER_SMALL, labelString: '91.6', pathStyle: 'TRAIL_PAVED', labelPosition: 'ABOVE', labelDetails: "<b>91.59</b>: LEFT<br><div style='width:200px'>Left to exit Walkway Over the Hudson</div>", mouseoverText: '91.6 LEFT: Left to exit Walkway Over the Hudson'  }, 
+        { latLngString: '41.710070, -73.955240', size: MARKER_SMALL, labelString: '91.6', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>91.63</b>: LEFT<br><div style='width:200px'>Left onto Haviland Rd</div>", mouseoverText: '91.6 LEFT: Left onto Haviland Rd'  }, 
+        { latLngString: '41.703740, -73.951920', size: MARKER_SMALL, labelString: '92.1', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>92.13</b>: LEFT<br><div style='width:200px'>Slight left onto Mid-Hudson Bridge North Walkway. Runners are crossing on the north side, facing traffic</div>", mouseoverText: '92.1 LEFT: Slight left onto Mid-Hudson Bridge North Walkway. Runners are crossing on the north side, facing traffic'  }, 
+        { latLngString: '41.702675, -73.935939', size: MARKER_SMALL, labelString: '92.9', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>92.93</b>: STRAIGHT<br><div style='width:200px'>Continue straight on Church St. The runners must be careful crossing an interchange</div>", mouseoverText: '92.9 STRAIGHT: Continue straight on Church St. The runners must be careful crossing an interchange'  }, 
+        { latLngString: '41.702755, -73.933911', size: MARKER_SMALL, labelString: '93.1', pathStyle: 'ROAD_OPEN', labelPosition: 'BELOW', labelDetails: "<b>93.13</b>: LEFT<br><div style='width:200px'>Left onto Jefferson St</div>", mouseoverText: '93.1 LEFT: Left onto Jefferson St'  }, 
+        { latLngString: '41.703300, -73.933890', size: MARKER_SMALL, labelString: '93.2', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>93.17</b>: RIGHT<br><div style='width:200px'>Right onto Union St</div>", mouseoverText: '93.2 RIGHT: Right onto Union St'  }, 
+        { latLngString: '41.703670, -73.932550', size: MARKER_SMALL, labelString: '93.2', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>93.24</b>: LEFT<br><div style='width:200px'>Left onto S Bridge St</div>", mouseoverText: '93.2 LEFT: Left onto S Bridge St'  }, 
+        { latLngString: '41.705070, -73.932580', size: MARKER_SMALL, labelString: '93.3', pathStyle: 'ROAD_OPEN', labelPosition: 'LEFT', labelDetails: "<b>93.34</b>: RIGHT<br><div style='width:200px'>Right onto Main St</div>", mouseoverText: '93.3 RIGHT: Right onto Main St'  }, 
+        { latLngString: '41.704860, -73.931560', size: MARKER_LARGE, labelString: '93.4', pathStyle: 'ROAD_OPEN', labelPosition: 'DEFAULT', labelDetails: "<b>93.39</b><small> (GPS 41.7049, -73.9316)</small>: FINISH<br><div style='width:200px'>Finish at corner of Main and Vassar St, at Schatzi\'s Pub, 202 Main St, Poughkeepsie</div>", mouseoverText: '93.4 FINISH: Finish at corner of Main and Vassar St, at Schatzi\'s Pub, 202 Main St, Poughkeepsie', majorLabel: '93'  }, 
+      ];
+}
+
+
+function createThreeMarkerArrays(markerConfigs, map) {
+    var majorMarkers = [];
+    var allLargeMarkers = [];
+    var allSmallMarkers = [];
+
+    for (var i=0; i<markerConfigs.length; i++) {
+        var thisMarkerConfig = markerConfigs[i];
+        if (!thisMarkerConfig) { // make sure it's defined
+            continue;
+        }
+
+        var thisLatLngArray = thisMarkerConfig.latLngString.split(',');
+        var thisIcon = (thisMarkerConfig.size === MARKER_LARGE) ? Config.ICON["DIAMOND"].large : Config.ICON["CIRCLE"].medium;
+        var thisPathStyle = Config.PATHSTYLE[thisMarkerConfig.pathStyle];
+
+        // Font size: for visible markers (vast majority), MARKER_LARGE --> LABELFONT.large; MARKER_SMALL --> LABELFONT.medium.
+        // But for invisible markers, MARKER_LARGE --> font medium; MARKER_SMALL --> font small
+        var thisFontSize = Config.LABELFONT.medium; // default
+        if (thisMarkerConfig.size === MARKER_LARGE) {
+            thisFontSize = (thisPathStyle !== Config.PATHSTYLE.INVISIBLE && thisMarkerConfig.labelString.length < 5) 
+		? Config.LABELFONT.large : Config.LABELFONT.medium;
+        } else {
+            thisFontSize = (thisPathStyle !== Config.PATHSTYLE.INVISIBLE && thisMarkerConfig.labelString.length < 6) 
+		? Config.LABELFONT.medium : Config.LABELFONT.small;
+        }
+
+        var markerOptions = {
+            position : new google.maps.LatLng(thisLatLngArray[0], thisLatLngArray[1]),
+            icon : colorIcon(thisIcon, thisPathStyle.foregroundColor),
+            strokeOpacity : thisPathStyle.markerStrokeOpacity || Config.OPACITY["MARKERSTROKE"],
+            labelContent : thisMarkerConfig.labelString,
+            labelPosition : thisMarkerConfig.labelPosition,
+            labelStyle : { 
+                color : thisPathStyle.labelColor,
+                fontSize : thisFontSize,
+                opacity : Config.OPACITY["LABEL"]
+            },
+            mouseoverText : thisMarkerConfig.mouseoverText,
+            infowindowText : thisMarkerConfig.labelDetails
+          };
+
+        var marker = getLabeledMarker(markerOptions, map);
+
+        if (thisMarkerConfig.size === MARKER_LARGE) {
+            allLargeMarkers.push(marker);
+        } else {
+            allSmallMarkers.push(marker);
+        }
+
+        // Large markers get a shadow set that is shown at lower-resolution zooms.
+
+        if (thisMarkerConfig.size === MARKER_LARGE) {
+
+            var thisMajorLabel = thisMarkerConfig.majorLabel || '';
+            var thisMajorIcon = (thisMajorLabel !== '') ? colorIcon(Config.ICON["DIAMOND"].medium, Colors.DARK_GREY)  : 
+                  colorIcon(Config.ICON["DIAMOND"].small, thisPathStyle.foregroundColor);
+            var thisMajorMarkerOptions = {
+                position : new google.maps.LatLng(thisLatLngArray[0], thisLatLngArray[1]),
+                icon : thisMajorIcon,
+                strokeOpacity : thisPathStyle.markerStrokeOpacity || Config.OPACITY["MARKERSTROKE"],
+                labelContent : thisMajorLabel,
+                labelPosition : thisMarkerConfig.labelPosition,
+                labelStyle : { 
+                    color : Colors.DARK_RED,
+                    fontSize : Config.LABELFONT.medium,
+                    opacity : Config.OPACITY["LABEL"]
+                },
+                mouseoverText : thisMarkerConfig.mouseoverText,
+                infowindowText : thisMarkerConfig.labelDetails
+              };
+
+            majorMarkers.push(getLabeledMarker(thisMajorMarkerOptions, map));
+        }
+
+    }
+
+    return {
+        majorMarkers : majorMarkers,
+        allLargeMarkers : allLargeMarkers,
+        allSmallMarkers : allSmallMarkers
+      };
+
+}
+
+
+function getBathroomMarkerConfigs() {
+    // Paste configuration data inside the returned array.
+
+    // NO BATHROOMS LISTED IN INITIAL WORKING RELEASE
+
+    return [
+        { latLngString: '40.714002, -73.933852', labelDetails: 'BP Gas Station / Convenience Store (Metropolitan Ave just past Morgan Ave)', mouseoverText: 'Gas' }
+      ];
+}
+
+function createBathroomMarkerArrays(markerConfigs, map) {
+  var bathroomMarkers = [];
+
+  for (var i=0; i<markerConfigs.length; i++) {
+      var thisMarkerConfig = markerConfigs[i];
+      if (!thisMarkerConfig) { // make sure it's defined
+          continue;
+      }
+
+      var thisLatLngArray = thisMarkerConfig.latLngString.split(',');
+      var thisIcon = Config.ICON["WEDGE_UP"].medium;
+      var thisColor = Colors.MEDIUM_PURPLE;
+      var thisFontSize = Config.LABELFONT.small;
+
+      var markerOptions = {
+          position : new google.maps.LatLng(thisLatLngArray[0], thisLatLngArray[1]),
+          icon : colorIcon(thisIcon, thisColor),
+          strokeOpacity : Config.OPACITY["MARKERSTROKE"],
+          labelContent : 'M|W',
+          labelPosition : 'DEEP_BELOW',
+          labelStyle : { 
+              color : thisColor,
+              fontSize : thisFontSize,
+              opacity : Config.OPACITY["LABEL"]
+          },
+          mouseoverText : 'Bathroom', // thisMarkerConfig.mouseoverText,
+          infowindowText : '<b>Bathroom:</b> ' + thisMarkerConfig.labelDetails
+        };
+
+      var marker = getLabeledMarker(markerOptions, map);
+
+      bathroomMarkers.push(marker);
+  }
+
+  return bathroomMarkers;
+}
+
+
+function showOrHideElements(currentZoom) {
+    var markerArrays = activeState.markerArrays;
+
+    // iterate over markers and call setVisible
+    for (var i = 0; i < markerArrays.allSmallMarkers.length; i++) { 
+        markerArrays.allSmallMarkers[i].setVisible(currentZoom >= Config.ZOOMDISPLAY["SMALLMARKERS"]-1);
+        markerArrays.allSmallMarkers[i].set("labelVisible", currentZoom >= Config.ZOOMDISPLAY["SMALLMARKERS"]);
+    }
+
+    for (var i = 0; i < markerArrays.allLargeMarkers.length; i++) {
+        markerArrays.allLargeMarkers[i].setVisible(currentZoom >= Config.ZOOMDISPLAY["NONMAJORMARKERS"]);
+    }
+
+    for (var i = 0; i < markerArrays.majorMarkers.length; i++) {
+        if (currentZoom < Config.ZOOMDISPLAY["NONMAJORMARKERS"]-3) {
+            var thisLabelContent = markerArrays.majorMarkers[i].get("labelContent");
+            if (thisLabelContent === '') {
+                markerArrays.majorMarkers[i].setVisible(false);
+            } else {
+                markerArrays.majorMarkers[i].set("labelVisible", false);
+            }
+        } else if (currentZoom < Config.ZOOMDISPLAY["NONMAJORMARKERS"]) {
+            markerArrays.majorMarkers[i].setVisible(true);
+            markerArrays.majorMarkers[i].set("labelVisible", true);
+        } else {
+            markerArrays.majorMarkers[i].setVisible(false);
+        }
+    }
+
+    for (var i = 0; i < markerArrays.bathroomMarkers.length; i++) { 
+        markerArrays.bathroomMarkers[i].setVisible(activeState.showBathrooms && currentZoom >= Config.ZOOMDISPLAY["SPECIALMARKERS"]-1);
+        markerArrays.bathroomMarkers[i].set("labelVisible", activeState.showBathrooms && currentZoom >= Config.ZOOMDISPLAY["SPECIALMARKERS"]);
+    }
+
+    for (var i = 0; i < activeState.vanRoutes.length; i++) {
+        activeState.vanRoutes[i].setVisible(activeState.showVanRoutes && currentZoom >= Config.ZOOMDISPLAY["SPECIALMARKERS"]-1);
+    }
+
+}
+
+
+function createLabelLayer(map) {
+    // The following variables are temporary just to know what we're talking about.
+
+    var markerConfigs = getMarkerConfigs();
+
+    var markerArrays = createThreeMarkerArrays(markerConfigs, map); // returns an object with three elements, each an array of markers
+
+    markerArrays.bathroomMarkers = createBathroomMarkerArrays(getBathroomMarkerConfigs(), map); // adds an array of bathroom markers
+
+    activeState.markerArrays = markerArrays;
+
+    google.maps.event.addListener(map, 'zoom_changed', 
+      function() {
+	  showOrHideElements(map.getZoom());
+      });
+
+    showOrHideElements(map.getZoom());
+}
+
+
+function getSegmentConfigs() {
+    // Paste segment configurations into the return [ ] array
+
+    return [
+        {
+          title: 'McCarren Park Brooklyn to Pulaski Bridge', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.950650,40.721700,0.0 -73.949870,40.722170,0.0 -73.953660,40.728820,0.0 -73.954250,40.730190,0.0 -73.951570,40.730450,0.0 -73.951860,40.731140,0.0 -73.952624,40.734545,0.0 -73.952660,40.735340,0.0'.split(' ') 
+        }, { 
+          title: 'Pulaski Bridge (NO VAN ACCESS)', 
+          segmentType: 'ROAD_NOVANACCESS', 
+          pointsAsKMLStrings: '-73.952660,40.735340,0.0 -73.953030,40.737470,0.0 -73.953040,40.738030,0.0 -73.952750,40.739240,0.0 -73.951510,40.742790,0.0'.split(' ') 
+        }, { 
+          title: 'Long Island City streets to Queensboro Bridge entrance', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.951510,40.742790,0.0 -73.951830,40.743080,0.0 -73.951240,40.743650,0.0 -73.949640,40.748540,0.0 -73.945070,40.747640,0.0 -73.944790,40.748390,0.0 -73.942280,40.751250,0.0 -73.941840,40.751590,0.0 -73.940560,40.751010,0.0 -73.940640,40.750960,0.0'.split(' ') 
+        }, { 
+          title: 'Crossing over Queensboro Bridge (NO VAN ACCESS)', 
+          segmentType: 'ROAD_NOVANACCESS', 
+          pointsAsKMLStrings: '-73.940640,40.750960,0.0 -73.952722,40.756218,0.0 -73.960560,40.759590,0.0 -73.961770,40.760180,0.0 -73.962710,40.760580,0.0 -73.962890,40.760690,0.0 -73.962810,40.760720,0.0 -73.961700,40.760250,0.0'.split(' ') 
+        }, { 
+          title: 'Manhattan: E 60th St from bridge to Central Park', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.961700,40.760250,0.0 -73.961603,40.760309,0.0 -73.966075,40.762209,0.0 -73.972611,40.764988,0.0 -73.973070,40.765120,0.0'.split(' ') 
+        }, { 
+          title: 'Through Central Park to W 72nd St', 
+          segmentType: 'TRAIL_PAVED', 
+          pointsAsKMLStrings: '-73.973070,40.765120,0.0 -73.973070,40.765280,0.0 -73.972560,40.766130,0.0 -73.972670,40.766550,0.0 -73.972960,40.766990,0.0 -73.973140,40.767590,0.0 -73.973050,40.768540,0.0 -73.972690,40.769290,0.0 -73.972470,40.769450,0.0 -73.971580,40.769880,0.0 -73.971170,40.770360,0.0 -73.970940,40.770820,0.0 -73.970460,40.771190,0.0 -73.969390,40.771770,0.0 -73.968890,40.772690,0.0 -73.968890,40.773080,0.0 -73.968990,40.773310,0.0 -73.969330,40.773450,0.0 -73.970180,40.773420,0.0 -73.971710,40.773820,0.0 -73.972630,40.773769,0.0 -73.973000,40.773810,0.0 -73.973320,40.773920,0.0 -73.974030,40.774540,0.0 -73.974780,40.774730,0.0 -73.975240,40.774760,0.0 -73.975590,40.775200,0.0 -73.975602,40.775512,0.0 -73.975480,40.775980,0.0 -73.975940,40.776160,0.0'.split(' ') 
+        }, { 
+          title: 'Manhattan: W 72nd St to Riverside Park', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.975940,40.776160,0.0 -73.982126,40.778778,0.0 -73.985783,40.780310,0.0'.split(' ') 
+        }, { 
+          title: 'Riverside Park, Hudson Greenway to brief exit at Dyckman Ave', 
+          segmentType: 'TRAIL_PAVED', 
+          pointsAsKMLStrings: '-73.985783,40.780310,0.0 -73.985820,40.780560,0.0 -73.985900,40.780590,0.0 -73.985940,40.780650,0.0 -73.985880,40.780710,0.0 -73.986270,40.781270,0.0 -73.986880,40.781568,0.0 -73.987390,40.781760,0.0 -73.987690,40.781750,0.0 -73.987900,40.781800,0.0 -73.985410,40.785320,0.0 -73.981780,40.790660,0.0 -73.980660,40.792350,0.0 -73.979130,40.794350,0.0 -73.977480,40.796670,0.0 -73.972650,40.803550,0.0 -73.971890,40.804530,0.0 -73.968530,40.809010,0.0 -73.967410,40.810870,0.0 -73.966590,40.812030,0.0 -73.965800,40.813160,0.0 -73.965450,40.813490,0.0 -73.965400,40.813710,0.0 -73.964990,40.814330,0.0 -73.964090,40.815700,0.0 -73.963380,40.816560,0.0 -73.962395,40.817575,0.0 -73.961770,40.818230,0.0 -73.961318,40.818818,0.0 -73.960450,40.819840,0.0 -73.959710,40.820400,0.0 -73.958810,40.821490,0.0 -73.958680,40.821580,0.0 -73.958320,40.821620,0.0 -73.957650,40.822440,0.0 -73.955820,40.824210,0.0 -73.954290,40.825710,0.0 -73.952960,40.827260,0.0 -73.953040,40.827470,0.0 -73.953390,40.827680,0.0 -73.953670,40.828030,0.0 -73.953750,40.828320,0.0 -73.953660,40.828610,0.0 -73.951380,40.831930,0.0 -73.951340,40.832260,0.0 -73.950810,40.832810,0.0 -73.950750,40.833300,0.0 -73.949960,40.834490,0.0 -73.949630,40.835790,0.0 -73.949020,40.837360,0.0 -73.949010,40.837800,0.0 -73.948700,40.838500,0.0 -73.948690,40.838810,0.0 -73.948640,40.838920,0.0 -73.948430,40.839060,0.0 -73.948110,40.839470,0.0 -73.947750,40.839630,0.0 -73.946910,40.840840,0.0 -73.946140,40.842430,0.0 -73.946020,40.842830,0.0 -73.946100,40.843680,0.0 -73.946010,40.844410,0.0 -73.946010,40.846220,0.0 -73.946160,40.846840,0.0 -73.946464,40.846901,0.0 -73.946654,40.846970,0.0 -73.946714,40.847073,0.0 -73.946718,40.847197,0.0 -73.946554,40.847362,0.0 -73.946550,40.848000,0.0 -73.946460,40.849270,0.0 -73.946050,40.850170,0.0 -73.945090,40.851250,0.0 -73.943780,40.851550,0.0 -73.943460,40.851500,0.0 -73.943320,40.851300,0.0 -73.943500,40.851080,0.0 -73.943770,40.850900,0.0 -73.943730,40.850790,0.0 -73.943550,40.850790,0.0 -73.943280,40.850920,0.0 -73.942740,40.851480,0.0 -73.942285,40.851885,0.0 -73.941620,40.852540,0.0 -73.940600,40.853960,0.0 -73.940140,40.854970,0.0 -73.937380,40.858250,0.0 -73.937370,40.858440,0.0 -73.936480,40.859350,0.0 -73.935700,40.859800,0.0 -73.935350,40.860300,0.0 -73.935210,40.861230,0.0 -73.933750,40.863500,0.0 -73.933150,40.865160,0.0 -73.932190,40.866640,0.0 -73.931410,40.867990,0.0 -73.931450,40.868010,0.0 -73.931950,40.867420,0.0 -73.931990,40.867420,0.0 -73.931230,40.868850,0.0'.split(' ') 
+        }, { 
+          title: 'Dyckman Ave (very brief)', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.931230,40.868850,0.0 -73.931520,40.869090,0.0'.split(' ') 
+        }, { 
+          title: 'Greenway to exit at W 218th St', 
+          segmentType: 'TRAIL_PAVED', 
+          pointsAsKMLStrings: '-73.931520,40.869090,0.0 -73.931460,40.869610,0.0 -73.931140,40.870170,0.0 -73.930640,40.871430,0.0 -73.929590,40.873770,0.0 -73.929490,40.873890,0.0 -73.929430,40.873870,0.0 -73.929460,40.873810,0.0 -73.929420,40.873800,0.0 -73.929390,40.873850,0.0 -73.929010,40.873720,0.0 -73.928820,40.873740,0.0 -73.928560,40.873950,0.0 -73.928050,40.874810,0.0 -73.927700,40.875180,0.0 -73.927530,40.875540,0.0 -73.927560,40.875710,0.0 -73.927110,40.876380,0.0 -73.926620,40.876680,0.0 -73.925450,40.876710,0.0 -73.924750,40.877020,0.0 -73.923760,40.876980,0.0 -73.922860,40.876700,0.0 -73.922650,40.876490,0.0 -73.922640,40.876020,0.0 -73.922600,40.875730,0.0 -73.923050,40.874830,0.0 -73.923260,40.874660,0.0 -73.923580,40.874140,0.0 -73.923990,40.873680,0.0 -73.923950,40.873530,0.0 -73.923660,40.873340,0.0 -73.923580,40.873660,0.0 -73.923350,40.874020,0.0 -73.922730,40.874290,0.0 -73.922320,40.873710,0.0 -73.921790,40.873250,0.0 -73.921430,40.873040,0.0 -73.921030,40.872900,0.0 -73.920580,40.872910,0.0 -73.920220,40.872990,0.0 -73.920130,40.872930,0.0 -73.919840,40.872940,0.0 -73.919610,40.873033,0.0 -73.919190,40.873070,0.0 -73.918610,40.873050,0.0 -73.918460,40.873020,0.0'.split(' ') 
+        }, { 
+          title: 'Manhattan and Bronx to Van Cortlandt Park', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.918460,40.873020,0.0 -73.913902,40.871133,0.0 -73.913405,40.871577,0.0 -73.912080,40.872601,0.0 -73.911463,40.873246,0.0 -73.910980,40.873630,0.0 -73.909840,40.874380,0.0 -73.907606,40.876060,0.0 -73.906533,40.876633,0.0 -73.906138,40.876966,0.0 -73.905610,40.877700,0.0 -73.903540,40.880600,0.0 -73.902233,40.882427,0.0 -73.901541,40.883449,0.0 -73.900723,40.884834,0.0 -73.900230,40.885852,0.0 -73.899932,40.886134,0.0 -73.899615,40.886558,0.0 -73.897419,40.886152,0.0'.split(' ') 
+        }, { 
+          title: 'Van Cortland Park, Putnum Trail, South County Trailway to brief exit in Elmsford', 
+          segmentType: 'TRAIL_PAVED', 
+          pointsAsKMLStrings: '-73.897419,40.886152,0.0 -73.897070,40.886690,0.0 -73.896350,40.887070,0.0 -73.895430,40.887950,0.0 -73.895240,40.888420,0.0 -73.894780,40.888720,0.0 -73.894500,40.888770,0.0 -73.894390,40.888760,0.0 -73.894190,40.888620,0.0 -73.893980,40.888660,0.0 -73.893580,40.888990,0.0 -73.893320,40.889060,0.0 -73.893470,40.889240,0.0 -73.891710,40.890450,0.0 -73.890450,40.891510,0.0 -73.889810,40.892360,0.0 -73.888670,40.894457,0.0 -73.888035,40.895800,0.0 -73.884980,40.905460,0.0 -73.884780,40.907860,0.0 -73.884580,40.910580,0.0 -73.882290,40.919490,0.0 -73.880640,40.923150,0.0 -73.880310,40.925350,0.0 -73.879880,40.926280,0.0 -73.878940,40.927430,0.0 -73.878370,40.928700,0.0 -73.877920,40.930430,0.0 -73.877540,40.930950,0.0 -73.877100,40.931360,0.0 -73.875480,40.932430,0.0 -73.872950,40.933790,0.0 -73.872050,40.934580,0.0 -73.871340,40.935620,0.0 -73.868685,40.940125,0.0 -73.867940,40.941160,0.0 -73.866880,40.942090,0.0 -73.865920,40.942470,0.0 -73.864700,40.942600,0.0 -73.863060,40.942320,0.0 -73.861740,40.942310,0.0 -73.861080,40.942460,0.0 -73.860320,40.942700,0.0 -73.859210,40.943320,0.0 -73.857810,40.944670,0.0 -73.855340,40.947230,0.0 -73.855040,40.947780,0.0 -73.854990,40.948590,0.0 -73.855430,40.949320,0.0 -73.856330,40.949920,0.0 -73.859740,40.951370,0.0 -73.860905,40.952535,0.0 -73.861330,40.953040,0.0 -73.862060,40.953420,0.0 -73.864070,40.953760,0.0 -73.865360,40.954310,0.0 -73.866120,40.954810,0.0 -73.866630,40.955400,0.0 -73.866880,40.956180,0.0 -73.867545,40.957095,0.0 -73.869180,40.960680,0.0 -73.869500,40.961370,0.0 -73.870080,40.963420,0.0 -73.870380,40.964130,0.0 -73.870840,40.967010,0.0 -73.870700,40.967810,0.0 -73.870480,40.968440,0.0 -73.868550,40.971750,0.0 -73.867970,40.973230,0.0 -73.867750,40.974200,0.0 -73.867600,40.976270,0.0 -73.867503,40.978791,0.0 -73.867365,40.979725,0.0 -73.867030,40.980943,0.0 -73.866250,40.983170,0.0 -73.864530,40.988390,0.0 -73.863820,40.989950,0.0 -73.859867,40.996057,0.0 -73.855897,41.002183,0.0 -73.855030,41.003390,0.0 -73.854660,41.004150,0.0 -73.853450,41.006030,0.0 -73.852430,41.009000,0.0 -73.851740,41.010135,0.0 -73.849533,41.012790,0.0 -73.848320,41.014310,0.0 -73.847780,41.016105,0.0  -73.846240,41.022140,0.0 -73.845720,41.022760,0.0 -73.844430,41.023920,0.0 -73.844510,41.024110,0.0 -73.843930,41.025460,0.0 -73.843620,41.026730,0.0 -73.843630,41.027350,0.0 -73.843390,41.028210,0.0 -73.842960,41.028460,0.0 -73.839860,41.035890,0.0 -73.838330,41.037500,0.0 -73.837850,41.038360,0.0 -73.837270,41.040820,0.0 -73.836450,41.042160,0.0 -73.835780,41.042910,0.0 -73.834840,41.043640,0.0 -73.834310,41.044180,0.0 -73.833810,41.044250,0.0 -73.832930,41.045000,0.0 -73.826290,41.048580,0.0 -73.824500,41.049840,0.0 -73.823020,41.051120,0.0 -73.821529,41.053162,0.0 -73.820470,41.055040,0.0'.split(' ') 
+        }, { 
+          title: 'Main St in Elmsford (very brief)', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.820470,41.055040,0.0 -73.820356,41.055224,0.0 -73.820790,41.055450,0.0'.split(' ') 
+        }, { 
+          title: 'North County Trailway to Briarcliff Manor', 
+          segmentType: 'TRAIL_PAVED', 
+          pointsAsKMLStrings: '-73.820790,41.055450,0.0 -73.820640,41.056050,0.0 -73.820650,41.056600,0.0 -73.821020,41.057300,0.0 -73.821230,41.057450,0.0 -73.821410,41.057780,0.0 -73.821180,41.058320,0.0 -73.821100,41.059040,0.0 -73.820830,41.059410,0.0 -73.819750,41.059980,0.0 -73.819440,41.061970,0.0 -73.819130,41.063120,0.0 -73.819100,41.063650,0.0 -73.819310,41.064640,0.0 -73.819620,41.065170,0.0 -73.820570,41.066000,0.0 -73.823470,41.067700,0.0 -73.824360,41.068790,0.0 -73.824870,41.069630,0.0 -73.826070,41.070650,0.0 -73.827060,41.071160,0.0 -73.828710,41.071570,0.0 -73.831090,41.071890,0.0 -73.831930,41.072260,0.0 -73.832560,41.072900,0.0 -73.833060,41.074313,0.0 -73.833590,41.076270,0.0 -73.833540,41.076860,0.0 -73.833280,41.077390,0.0 -73.832780,41.077930,0.0 -73.830873,41.079167,0.0 -73.829570,41.080060,0.0 -73.828580,41.081060,0.0 -73.822310,41.088260,0.0 -73.821158,41.090265,0.0 -73.819980,41.092650,0.0 -73.819430,41.093390,0.0 -73.818810,41.093920,0.0 -73.818010,41.094410,0.0 -73.813540,41.096460,0.0 -73.812850,41.096890,0.0 -73.812380,41.097390,0.0 -73.812140,41.097940,0.0 -73.812100,41.098520,0.0 -73.812540,41.101340,0.0 -73.812410,41.102500,0.0 -73.812230,41.103320,0.0 -73.811430,41.104980,0.0 -73.810890,41.105730,0.0 -73.809207,41.107431,0.0 -73.805910,41.110740,0.0 -73.805660,41.111280,0.0 -73.805660,41.111850,0.0 -73.806050,41.112650,0.0 -73.806910,41.113800,0.0 -73.807120,41.114620,0.0 -73.807400,41.117220,0.0 -73.809193,41.120777,0.0 -73.810350,41.122810,0.0 -73.810700,41.123220,0.0 -73.810980,41.124180,0.0 -73.812140,41.126090,0.0 -73.813490,41.127580,0.0 -73.816530,41.129950,0.0 -73.817020,41.130570,0.0 -73.818540,41.133520,0.0 -73.822393,41.142407,0.0 -73.823020,41.143850,0.0 -73.823520,41.144710,0.0 -73.823938,41.145615,0.0 -73.824113,41.146393,0.0 -73.824590,41.147590,0.0'.split(' ') 
+        }, { 
+          title: 'NY-100 in Briarcliff Manor (short)', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.824590,41.147590,0.0 -73.825130,41.148590,0.0 -73.825590,41.149647,0.0 -73.825850,41.150360,0.0 -73.825940,41.151000,0.0 -73.825820,41.152300,0.0 -73.824640,41.155400,0.0 -73.824490,41.155380,0.0'.split(' ') 
+        }, { 
+          title: 'North County Trailway, continued to Millwood', 
+          segmentType: 'TRAIL_PAVED', 
+          pointsAsKMLStrings: '-73.824490,41.155380,0.0 -73.823520,41.156670,0.0 -73.821905,41.158580,0.0 -73.820740,41.159940,0.0 -73.818230,41.162920,0.0 -73.818000,41.163340,0.0 -73.817240,41.164020,0.0 -73.816710,41.164660,0.0 -73.815770,41.166360,0.0 -73.812300,41.173660,0.0 -73.812090,41.174510,0.0 -73.811740,41.174880,0.0 -73.811480,41.175340,0.0 -73.811610,41.175620,0.0'.split(' ') 
+        }, { 
+          title: 'NY-100 in Millwood (short)', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.811610,41.175620,0.0 -73.812090,41.175770,0.0 -73.811875,41.178295,0.0 -73.811790,41.178830,0.0 -73.811619,41.179464,0.0 -73.811082,41.180332,0.0 -73.808970,41.183140,0.0 -73.807890,41.184520,0.0 -73.806823,41.185552,0.0 -73.805863,41.186315,0.0 -73.805610,41.186320,0.0'.split(' ') 
+        }, { 
+          title: 'North County Trailway and Putnam County Trailway to Carmel', 
+          segmentType: 'TRAIL_PAVED', 
+          pointsAsKMLStrings: '-73.805610,41.186320,0.0 -73.804980,41.185940,0.0 -73.804490,41.185970,0.0 -73.803290,41.186790,0.0 -73.802920,41.186960,0.0 -73.801980,41.186800,0.0 -73.801095,41.186871,0.0 -73.800590,41.186940,0.0 -73.799530,41.187760,0.0 -73.799110,41.187990,0.0 -73.798710,41.188410,0.0 -73.798310,41.188740,0.0 -73.796710,41.189860,0.0 -73.796080,41.190540,0.0 -73.793510,41.192430,0.0 -73.792220,41.193540,0.0 -73.791630,41.194610,0.0 -73.791110,41.197030,0.0 -73.787740,41.205030,0.0 -73.786580,41.206610,0.0 -73.786580,41.206780,0.0 -73.786230,41.207420,0.0 -73.786140,41.208340,0.0 -73.786180,41.209805,0.0 -73.786010,41.211090,0.0 -73.785730,41.211900,0.0 -73.783980,41.213990,0.0 -73.783680,41.214840,0.0 -73.783660,41.215470,0.0 -73.783040,41.216570,0.0 -73.781880,41.218190,0.0 -73.779990,41.220040,0.0 -73.778550,41.221260,0.0 -73.777850,41.222220,0.0 -73.777630,41.222730,0.0 -73.777330,41.223850,0.0 -73.777018,41.226070,0.0 -73.776810,41.227550,0.0 -73.776780,41.228470,0.0 -73.777090,41.229350,0.0 -73.777580,41.229640,0.0 -73.778160,41.230110,0.0 -73.778040,41.230190,0.0 -73.778020,41.230290,0.0 -73.778960,41.231290,0.0 -73.779770,41.232980,0.0 -73.780320,41.233500,0.0 -73.781030,41.233890,0.0 -73.781610,41.234070,0.0 -73.782781,41.234227,0.0 -73.783620,41.234410,0.0 -73.784110,41.234590,0.0 -73.785232,41.235413,0.0 -73.786015,41.236220,0.0 -73.786800,41.237110,0.0 -73.787120,41.237550,0.0 -73.787440,41.238250,0.0 -73.787520,41.239690,0.0 -73.787420,41.240990,0.0 -73.787920,41.243920,0.0 -73.788240,41.246820,0.0 -73.788640,41.251100,0.0 -73.788525,41.252030,0.0 -73.788180,41.253630,0.0 -73.787070,41.256050,0.0 -73.786248,41.257328,0.0 -73.785303,41.258603,0.0 -73.784340,41.259710,0.0 -73.782230,41.261850,0.0 -73.781530,41.262940,0.0 -73.780730,41.267370,0.0 -73.780770,41.268140,0.0 -73.780460,41.268850,0.0 -73.780110,41.270880,0.0 -73.779910,41.272760,0.0 -73.779590,41.273810,0.0 -73.779050,41.274660,0.0 -73.778300,41.275360,0.0 -73.775340,41.276940,0.0 -73.774770,41.277420,0.0 -73.774310,41.278100,0.0 -73.773920,41.279240,0.0 -73.773820,41.281630,0.0 -73.773370,41.282550,0.0 -73.770280,41.286160,0.0 -73.769790,41.286850,0.0 -73.769480,41.287530,0.0 -73.769380,41.288520,0.0 -73.769610,41.289580,0.0 -73.770150,41.290650,0.0 -73.770340,41.291430,0.0 -73.770285,41.292765,0.0 -73.769470,41.294940,0.0 -73.768140,41.298640,0.0 -73.767200,41.303970,0.0 -73.766790,41.304780,0.0 -73.765360,41.306180,0.0 -73.764830,41.306680,0.0 -73.764170,41.307810,0.0 -73.762220,41.314330,0.0 -73.761740,41.315130,0.0 -73.758150,41.320790,0.0 -73.757840,41.321460,0.0 -73.757750,41.322080,0.0 -73.758070,41.324930,0.0 -73.758070,41.326230,0.0 -73.757660,41.330180,0.0 -73.757430,41.330830,0.0 -73.756580,41.332030,0.0 -73.754340,41.334460,0.0 -73.754020,41.335000,0.0 -73.753810,41.335610,0.0 -73.753720,41.336350,0.0 -73.754750,41.343540,0.0 -73.754750,41.344610,0.0 -73.754570,41.345250,0.0 -73.753565,41.346805,0.0 -73.752750,41.347860,0.0 -73.752150,41.348510,0.0 -73.750730,41.349480,0.0 -73.747760,41.351870,0.0 -73.747270,41.352430,0.0 -73.747000,41.353140,0.0 -73.746650,41.358000,0.0 -73.746340,41.358980,0.0 -73.745760,41.359880,0.0 -73.744990,41.360830,0.0 -73.744940,41.361100,0.0  -73.745120,41.361450,0.0 -73.744664,41.362484,0.0 -73.744350,41.363020,0.0 -73.743910,41.363580,0.0 -73.743290,41.364090,0.0 -73.741460,41.365020,0.0 -73.741010,41.365550,0.0 -73.739870,41.367550,0.0 -73.739592,41.367675,0.0 -73.739080,41.368000,0.0 -73.738000,41.368850,0.0 -73.737033,41.369471,0.0 -73.735810,41.370420,0.0 -73.735620,41.370880,0.0 -73.734420,41.371720,0.0 -73.733980,41.371890,0.0 -73.732890,41.372390,0.0 -73.732140,41.372570,0.0 -73.730850,41.372710,0.0 -73.729982,41.372742,0.0 -73.729320,41.372880,0.0 -73.728610,41.373150,0.0 -73.728200,41.373230,0.0 -73.726720,41.374460,0.0 -73.726720,41.374800,0.0 -73.726140,41.375620,0.0 -73.725650,41.376480,0.0 -73.725290,41.377060,0.0 -73.725200,41.377420,0.0 -73.725070,41.377480,0.0 -73.725020,41.377760,0.0 -73.724120,41.377980,0.0 -73.723040,41.377950,0.0 -73.722920,41.378730,0.0 -73.722504,41.379070,0.0 -73.716070,41.381990,0.0 -73.715430,41.382370,0.0 -73.714280,41.382810,0.0 -73.713330,41.382980,0.0 -73.709527,41.383014,0.0 -73.704882,41.383264,0.0 -73.703630,41.383220,0.0 -73.702280,41.382780,0.0 -73.701480,41.382630,0.0 -73.700630,41.382670,0.0 -73.700170,41.382800,0.0 -73.699550,41.383070,0.0 -73.698740,41.383840,0.0 -73.698370,41.384670,0.0 -73.698270,41.385210,0.0 -73.698070,41.386680,0.0 -73.697530,41.388250,0.0 -73.697560,41.388620,0.0 -73.697840,41.389350,0.0 -73.698960,41.390680,0.0 -73.699190,41.391220,0.0 -73.699320,41.392720,0.0 -73.699090,41.393340,0.0 -73.698580,41.394010,0.0 -73.698370,41.394210,0.0 -73.697456,41.394758,0.0 -73.696370,41.395350,0.0 -73.695690,41.395960,0.0 -73.695370,41.396510,0.0 -73.695160,41.397200,0.0 -73.695060,41.399000,0.0 -73.694840,41.399470,0.0 -73.694620,41.399730,0.0 -73.694000,41.400180,0.0 -73.693410,41.400400,0.0 -73.691530,41.400870,0.0 -73.691172,41.401059,0.0 -73.690860,41.401370,0.0 -73.690500,41.401890,0.0 -73.690370,41.402440,0.0 -73.690950,41.406580,0.0 -73.690900,41.406940,0.0 -73.690440,41.407830,0.0 -73.689470,41.409180,0.0 -73.689260,41.409740,0.0 -73.689250,41.410260,0.0 -73.689820,41.411660,0.0 -73.689920,41.412250,0.0 -73.689870,41.412860,0.0 -73.689650,41.413340,0.0 -73.689110,41.413980,0.0 -73.688530,41.414330,0.0 -73.687990,41.414540,0.0 -73.687200,41.414630,0.0 -73.686290,41.414615,0.0 -73.684900,41.414800,0.0 -73.682230,41.415420,0.0 -73.681770,41.415670,0.0 -73.681140,41.416280,0.0 -73.680530,41.417160,0.0 -73.680160,41.417910,0.0 -73.679940,41.418060,0.0 -73.679620,41.418200,0.0 -73.679230,41.418630,0.0 -73.679180,41.418810,0.0 -73.679040,41.418930,0.0 -73.678920,41.418940,0.0'.split(' ') 
+        }, { 
+          title: 'Rural roads from Carmel to Hopewell Junction', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.678920,41.418940,0.0 -73.678420,41.421090,0.0 -73.678330,41.421700,0.0 -73.678400,41.421840,0.0 -73.678350,41.422230,0.0 -73.678670,41.424343,0.0 -73.678960,41.426210,0.0 -73.680650,41.426200,0.0 -73.683340,41.425610,0.0 -73.684410,41.425590,0.0 -73.686060,41.425930,0.0 -73.686560,41.425920,0.0 -73.687820,41.425590,0.0 -73.688470,41.425610,0.0 -73.688800,41.425730,0.0 -73.689340,41.426145,0.0 -73.689970,41.426925,0.0 -73.690410,41.427230,0.0 -73.691130,41.427400,0.0 -73.693240,41.427215,0.0 -73.693640,41.427100,0.0 -73.694800,41.426360,0.0 -73.695020,41.426310,0.0 -73.695250,41.426320,0.0 -73.695560,41.426440,0.0 -73.699950,41.429290,0.0 -73.700400,41.429270,0.0 -73.701110,41.429090,0.0 -73.702310,41.428900,0.0 -73.705280,41.428640,0.0 -73.705540,41.428630,0.0 -73.706130,41.428800,0.0 -73.706660,41.429200,0.0 -73.706880,41.429520,0.0 -73.706970,41.429870,0.0 -73.706970,41.430590,0.0 -73.707150,41.430920,0.0 -73.707560,41.431130,0.0 -73.708640,41.431370,0.0 -73.710890,41.432190,0.0 -73.714060,41.433380,0.0 -73.714710,41.433830,0.0 -73.715070,41.434280,0.0 -73.715380,41.435020,0.0 -73.715345,41.435830,0.0 -73.715410,41.436050,0.0 -73.715680,41.436450,0.0 -73.716125,41.436720,0.0 -73.716640,41.437070,0.0 -73.717720,41.438790,0.0 -73.718150,41.439010,0.0 -73.718890,41.439090,0.0 -73.719910,41.438790,0.0 -73.720760,41.438500,0.0 -73.721160,41.438480,0.0 -73.721430,41.438520,0.0 -73.721920,41.438700,0.0 -73.722280,41.438970,0.0 -73.722600,41.439390,0.0 -73.723190,41.439700,0.0 -73.724310,41.440010,0.0 -73.724570,41.440140,0.0 -73.725240,41.440690,0.0 -73.726350,41.441210,0.0 -73.727700,41.442505,0.0 -73.728330,41.443270,0.0 -73.728740,41.444420,0.0 -73.729760,41.445680,0.0 -73.730700,41.446520,0.0 -73.731240,41.446850,0.0 -73.732100,41.447260,0.0 -73.735120,41.448270,0.0 -73.738670,41.449490,0.0 -73.740230,41.450180,0.0 -73.741360,41.450450,0.0 -73.742260,41.450430,0.0 -73.743330,41.450320,0.0 -73.744400,41.450360,0.0 -73.745080,41.450510,0.0 -73.745970,41.450860,0.0 -73.747075,41.451475,0.0 -73.748930,41.453380,0.0 -73.749460,41.453840,0.0 -73.750520,41.454590,0.0 -73.751180,41.454940,0.0 -73.751840,41.455320,0.0 -73.752420,41.455770,0.0 -73.752770,41.456120,0.0 -73.753440,41.457010,0.0 -73.753980,41.457820,0.0 -73.754430,41.458760,0.0 -73.754550,41.459180,0.0 -73.754790,41.460720,0.0 -73.755730,41.462710,0.0 -73.756290,41.463310,0.0 -73.757740,41.463960,0.0 -73.758510,41.464450,0.0 -73.759350,41.465010,0.0 -73.759660,41.465480,0.0 -73.759850,41.466040,0.0 -73.759840,41.466450,0.0 -73.759220,41.467680,0.0 -73.759170,41.468280,0.0 -73.760070,41.470590,0.0 -73.760520,41.472240,0.0 -73.761120,41.472930,0.0 -73.762670,41.474570,0.0 -73.763830,41.475370,0.0 -73.764070,41.475610,0.0 -73.764530,41.476310,0.0 -73.765140,41.477170,0.0 -73.766110,41.478020,0.0 -73.766750,41.478380,0.0 -73.766970,41.478610,0.0 -73.767490,41.479230,0.0 -73.767910,41.479520,0.0 -73.768310,41.479840,0.0 -73.768650,41.480730,0.0 -73.768750,41.481440,0.0 -73.768760,41.482110,0.0 -73.768900,41.482520,0.0 -73.769160,41.482820,0.0 -73.769540,41.483040,0.0 -73.769510,41.483190,0.0 -73.769160,41.483510,0.0 -73.768410,41.483700,0.0 -73.768490,41.484520,0.0 -73.768410,41.485700,0.0 -73.768460,41.486940,0.0 -73.768720,41.488260,0.0 -73.768720,41.489190,0.0 -73.768630,41.490370,0.0 -73.768750,41.490920,0.0 -73.768670,41.491700,0.0 -73.769160,41.493080,0.0 -73.769300,41.493990,0.0 -73.769800,41.494550,0.0 -73.770720,41.494830,0.0 -73.771210,41.495180,0.0 -73.771320,41.495360,0.0 -73.771360,41.495560,0.0 -73.771090,41.496470,0.0 -73.771090,41.496760,0.0 -73.771540,41.497910,0.0 -73.771360,41.498670,0.0 -73.771310,41.499250,0.0 -73.771350,41.500900,0.0 -73.771580,41.502000,0.0 -73.771850,41.502530,0.0 -73.771890,41.502890,0.0 -73.772030,41.503620,0.0 -73.772160,41.503850,0.0 -73.772930,41.504530,0.0 -73.773510,41.505180,0.0 -73.774050,41.505460,0.0 -73.774390,41.506330,0.0 -73.774530,41.507710,0.0 -73.774770,41.508020,0.0 -73.775830,41.508610,0.0 -73.776770,41.508950,0.0 -73.777540,41.508980,0.0 -73.778250,41.509040,0.0 -73.779050,41.508870,0.0 -73.779740,41.508890,0.0 -73.780590,41.509190,0.0 -73.780940,41.509520,0.0 -73.781300,41.510100,0.0 -73.781480,41.510300,0.0 -73.781670,41.510400,0.0 -73.784300,41.511090,0.0 -73.786220,41.511220,0.0 -73.786730,41.511400,0.0 -73.787500,41.512150,0.0 -73.788650,41.512910,0.0 -73.788910,41.513260,0.0 -73.789115,41.513980,0.0 -73.789220,41.514750,0.0 -73.789230,41.515290,0.0 -73.789430,41.515880,0.0 -73.789620,41.516120,0.0 -73.790160,41.516500,0.0 -73.790350,41.516760,0.0 -73.790610,41.517660,0.0 -73.791150,41.518780,0.0 -73.791100,41.519180,0.0 -73.790710,41.520110,0.0 -73.790750,41.520320,0.0 -73.791060,41.520750,0.0 -73.790800,41.521470,0.0 -73.790970,41.522400,0.0 -73.790570,41.523840,0.0 -73.790560,41.524430,0.0 -73.790470,41.524870,0.0 -73.790250,41.525210,0.0 -73.789850,41.525590,0.0 -73.788960,41.527040,0.0 -73.788800,41.527500,0.0 -73.788830,41.527710,0.0 -73.789760,41.529040,0.0 -73.789940,41.529150,0.0 -73.791460,41.529180,0.0 -73.791860,41.529250,0.0 -73.792140,41.529390,0.0 -73.793030,41.530870,0.0 -73.795150,41.532740,0.0 -73.796810,41.534160,0.0 -73.799840,41.536850,0.0 -73.800320,41.537210,0.0 -73.800910,41.537500,0.0 -73.801670,41.537720,0.0 -73.802570,41.537830,0.0 -73.804260,41.537760,0.0 -73.804920,41.537820,0.0 -73.803500,41.539860,0.0 -73.802200,41.541530,0.0 -73.800910,41.542920,0.0 -73.800525,41.543690,0.0 -73.799610,41.546010,0.0 -73.799400,41.548460,0.0 -73.798980,41.550330,0.0 -73.798450,41.551000,0.0 -73.797910,41.552360,0.0 -73.797900,41.552700,0.0 -73.797940,41.552870,0.0 -73.797140,41.552960,0.0 -73.795700,41.553500,0.0 -73.795940,41.554320,0.0 -73.795900,41.555920,0.0 -73.795670,41.556890,0.0 -73.794860,41.558390,0.0 -73.794860,41.558880,0.0 -73.795390,41.560710,0.0 -73.795930,41.561900,0.0 -73.796560,41.562910,0.0 -73.796770,41.564150,0.0 -73.796970,41.564860,0.0 -73.797590,41.565920,0.0 -73.798390,41.566590,0.0 -73.800460,41.567630,0.0 -73.801850,41.568490,0.0 -73.803450,41.569320,0.0 -73.805200,41.569990,0.0 -73.805960,41.570540,0.0 -73.806820,41.571560,0.0 -73.807320,41.572530,0.0 -73.807490,41.573400,0.0 -73.807260,41.575150,0.0 -73.807450,41.576650,0.0 -73.807990,41.577940,0.0 -73.808410,41.579800,0.0 -73.808600,41.580180,0.0 -73.808790,41.580260,0.0 -73.807730,41.581140,0.0 -73.809970,41.583030,0.0 -73.810002,41.583246,0.0 -73.809702,41.583567,0.0 -73.808731,41.584177,0.0 -73.807792,41.584795,0.0 -73.807406,41.584908,0.0 -73.806762,41.584755,0.0 -73.806499,41.584739,0.0 -73.806322,41.584960,0.0 -73.806415,41.585050,0.0'.split(' ') 
+        }, { 
+          title: 'Dutchess Rail Trail to Poughkeepsie', 
+          segmentType: 'TRAIL_UNPAVED', 
+          pointsAsKMLStrings: '-73.806415,41.585050,0.0 -73.807700,41.585810,0.0 -73.808070,41.585990,0.0 -73.808770,41.586170,0.0 -73.810350,41.586340,0.0 -73.811140,41.586300,0.0 -73.815640,41.585980,0.0 -73.817320,41.586140,0.0 -73.818900,41.586570,0.0 -73.820200,41.587270,0.0 -73.829140,41.592960,0.0 -73.830330,41.594010,0.0 -73.831310,41.595170,0.0 -73.835960,41.601974,0.0 -73.836993,41.603486,0.0 -73.839220,41.606690,0.0 -73.839800,41.607200,0.0 -73.840280,41.608290,0.0 -73.845770,41.616230,0.0 -73.851450,41.622690,0.0 -73.851770,41.623170,0.0 -73.852120,41.623370,0.0 -73.852120,41.623470,0.0 -73.852030,41.623520,0.0 -73.852170,41.623720,0.0 -73.852400,41.623710,0.0 -73.852530,41.623840,0.0 -73.852540,41.623960,0.0 -73.854410,41.626060,0.0 -73.855430,41.627480,0.0 -73.856610,41.629980,0.0 -73.860030,41.640221,0.0 -73.860290,41.641250,0.0 -73.860370,41.642890,0.0 -73.860010,41.644470,0.0 -73.857610,41.650790,0.0 -73.855370,41.656760,0.0 -73.854860,41.657740,0.0 -73.854820,41.658110,0.0 -73.854900,41.658450,0.0 -73.854580,41.658970,0.0 -73.854220,41.660430,0.0 -73.854090,41.662610,0.0 -73.854340,41.664610,0.0 -73.854855,41.666395,0.0 -73.855790,41.668420,0.0 -73.863210,41.680550,0.0 -73.864290,41.681840,0.0 -73.865540,41.683040,0.0 -73.865990,41.683520,0.0 -73.867020,41.684290,0.0 -73.867918,41.684988,0.0 -73.868680,41.685260,0.0 -73.870660,41.686270,0.0 -73.873230,41.687310,0.0 -73.873380,41.687460,0.0 -73.873460,41.687620,0.0 -73.874430,41.687920,0.0 -73.874870,41.687890,0.0 -73.879100,41.689420,0.0 -73.880220,41.689910,0.0 -73.881170,41.690420,0.0 -73.882530,41.691460,0.0 -73.883280,41.692210,0.0 -73.883910,41.693060,0.0 -73.884170,41.693250,0.0 -73.884520,41.693990,0.0 -73.885690,41.698110,0.0 -73.885710,41.698390,0.0 -73.885634,41.699794,0.0 -73.885250,41.702730,0.0 -73.885210,41.703460,0.0 -73.885350,41.704680,0.0 -73.885970,41.706220,0.0 -73.887030,41.707700,0.0 -73.888300,41.708840,0.0 -73.895960,41.713480,0.0 -73.896040,41.713630,0.0 -73.896270,41.713700,0.0 -73.901550,41.716900,0.0 -73.902990,41.717500,0.0 -73.904770,41.717840,0.0 -73.906670,41.717830,0.0 -73.910477,41.717027,0.0 -73.915710,41.715860,0.0 -73.917800,41.715370,0.0 -73.919970,41.714690,0.0 -73.923040,41.713380,0.0 -73.926400,41.712000,0.0 -73.926560,41.711810,0.0 -73.929360,41.710810,0.0 -73.930560,41.710600,0.0 -73.931640,41.710520,0.0 -73.939942,41.710572,0.0 -73.949430,41.710630,0.0 -73.954690,41.710650,0.0 -73.955040,41.710350,0.0 -73.955240,41.710070,0.0'.split(' ') 
+        }, { 
+          title: 'Streets just west of the Hudson', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.955240,41.710070,0.0 -73.954380,41.709680,0.0 -73.951970,41.707610,0.0 -73.951560,41.706970,0.0 -73.951340,41.706260,0.0 -73.951380,41.705540,0.0 -73.951930,41.703880,0.0 -73.951920,41.703740,0.0'.split(' ') 
+        }, { 
+          title: 'Mid-Hudson Bridge (NO VAN ACCESS)', 
+          segmentType: 'ROAD_NOVANACCESS', 
+          pointsAsKMLStrings: '-73.951920,41.703740,0.0 -73.951670,41.703570,0.0 -73.939610,41.702250,0.0 -73.938890,41.702270,0.0 -73.936890,41.702580,0.0 -73.935939,41.702675,0.0'.split(' ') 
+        }, { 
+          title: 'Streets to the finish', 
+          segmentType: 'ROAD_OPEN', 
+          pointsAsKMLStrings: '-73.935939,41.702675,0.0 -73.935040,41.702800,0.0 -73.933911,41.702755,0.0 -73.933890,41.703300,0.0 -73.932550,41.703670,0.0 -73.932656,41.704229,0.0 -73.932670,41.704830,0.0 -73.932580,41.705070,0.0 -73.931560,41.704860,0.0'.split(' ') 
+        }
+
+      ];
+}
+
+
+function getVanRouteConfigs() {
+    // Paste segment configurations into the return [ ] array
+
+    return [
+        {
+          title: 'Going around the Scott Street segment', 
+          segmentType: 'VAN', 
+          pointsAsKMLStrings: '-73.924440,40.713920,0.0 -73.924280,40.713970,0.0 -73.923720,40.714000,0.0 -73.916380,40.713540,0.0 -73.916270,40.713320,0.0 -73.918080,40.712700,0.0 -73.919071,40.712120,0.0 -73.919580,40.711750,0.0 -73.920090,40.711170,0.0 -73.921860,40.709430,0.0'.split(' ') 
+        }, { 
+          title: 'Highland Park / Reservoir', 
+          segmentType: 'VAN', 
+          pointsAsKMLStrings: '-73.889510,40.686930,0.0 -73.888930,40.685570,0.0 -73.888730,40.685400,0.0 -73.888450,40.685270,0.0 -73.888150,40.685240,0.0 -73.886120,40.686000,0.0 -73.884550,40.686680,0.0 -73.884250,40.686740,0.0'.split(' ') 
+        }
+      ];
+}
+
+function createSegmentArray(map, segmentConfigs) {
+    var segmentArray = [];
+
+    for (var segNum = 0; segNum < segmentConfigs.length; segNum++) {
+	var latLngArray = [];
+	for (var i=0; i < segmentConfigs[segNum].pointsAsKMLStrings.length; i++) {
+            if (segmentConfigs[segNum].pointsAsKMLStrings[i]) {  // make sure it's defined
+	       var kmlTriple = segmentConfigs[segNum].pointsAsKMLStrings[i].split(',');    // KML style lists lng first then lat
+	       latLngArray.push(new google.maps.LatLng(kmlTriple[1], kmlTriple[0]));
+            }
+        }
+
+        segmentArray.push(addStyledLine(latLngArray, map, segmentConfigs[segNum].segmentType, segmentConfigs[segNum].title));
+    }
+
+    return segmentArray;
+}
+
+function createSegmentLayer(map) {
+    var segmentConfigs = getSegmentConfigs();
+
+    createSegmentArray(map, segmentConfigs);
+
+    activeState.vanRoutes = createSegmentArray(map, getVanRouteConfigs());  // again, less than perfect design, must fix
+}
+
+
+function createSliderButtonHtml(onclickFunctionName, currentState) {
+    var htmlOutput = '<!-- Rounded switch -->';
+    htmlOutput += '<div><label class="switch">';
+    htmlOutput += '  <input type="checkbox" onclick="' + onclickFunctionName + '(this);" ' + (currentState ? 'checked' : '') + '>';
+    htmlOutput += '  <div class="slider round"></div>';
+    htmlOutput += '</label></div>';
+
+    return htmlOutput;
+}
+
+function makeSVG(width, height, object) {
+    var svgText = '<svg width="' + width + '" height="' + height + '" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg"><g>';
+    svgText += object + '</g></svg>';
+    return svgText;
+}
+
+function createButtonTable() {
+    function addRow(label, onclickFunctionName, currentState, optionalIcon) { // Utility
+        var rowHtml = '<tr><td><b>' + label + '</b></td>';
+        rowHtml += '<td>' + (optionalIcon || '') + '</td>';
+        rowHtml += ' <td>' + createSliderButtonHtml(onclickFunctionName, currentState) + '</td> </tr>';
+        return rowHtml;
+    }
+
+    var htmlOutput = '';
+    var thisIcon = '';
+    if (InitialSettings.allowGeolocate || InitialSettings.allowBathrooms || InitialSettings.allowVanRoutes) { // only create table when there's at least one control needed
+        htmlOutput += '<!-- Settings table -->';
+        htmlOutput += '<table>';
+        if (InitialSettings.allowGeolocate) {
+            var circleSVG = '<circle cx="20" cy="10" r="8" stroke="' + Colors.MEDIUM_BLUE + '" stroke-width="2" fill="' + Colors.GREENISH_BLUE + '" />';
+            thisIcon = '<div>' + makeSVG(40, 20, circleSVG) + '</div>';
+            htmlOutput += addRow('Show Location', 'handleGeolocate', activeState.showGeolocate, thisIcon);
+        }
+        if (InitialSettings.allowBathrooms) {
+            var wedgeSVG = '';
+            wedgeSVG += '<line x1="15" y1="20" x2="20" y2="5" stroke="' + Colors.MEDIUM_PURPLE + '" stroke-width="2" fill="none" />';
+            wedgeSVG += '<line x1="20" y1="5" x2="25" y2="20" stroke="' + Colors.MEDIUM_PURPLE + '" stroke-width="2" fill="none" />';
+            wedgeSVG += '<line x1="25" y1="20" x2="20" y2="15" stroke="' + Colors.MEDIUM_PURPLE + '" stroke-width="2" fill="none" />';
+            wedgeSVG += '<line x1="20" y1="15" x2="15" y2="20" stroke="' + Colors.MEDIUM_PURPLE + '" stroke-width="2" fill="none" />';
+            thisIcon = '<div>' + makeSVG(40, 20, wedgeSVG)  + '</div>';
+            htmlOutput += addRow('Show Bathrooms', 'handleBathrooms', activeState.showBathrooms, thisIcon);
+        }
+        if (InitialSettings.allowVanRoutes) {
+            var hatchedSVG = createHatchedGraySVG(10, 10);
+            thisIcon = '<div>' + makeSVG(40, 20, hatchedSVG)  + '</div>';
+            htmlOutput += addRow('Show Van Routes', 'handleVanRoutes', activeState.showVanRoutes, thisIcon);
+        }
+        htmlOutput += '</table>';
+    }
+
+    return htmlOutput;
+}
+
+
+function createHatchedGraySVG(repetitions, yvalue) {
+    var resultSVG = '';
+    for (var i=0; i< repetitions; i++) {
+        resultSVG += '<line x1="' + (i*5-2) + '" y1="' + (yvalue+4) + '" x2="' + (i*5+2) + '" y2="' + yvalue + '" stroke-width="2" stroke="' + Colors.MODERATE_GREY + '" fill="none" />';
+    }
+    return resultSVG;
+}
+
+
+function createLegend(map) {
+    var legend = document.getElementById('legend');
+
+    function appendToLegend(legend, htmlCode) {
+        var div = document.createElement('div');
+        div.innerHTML = htmlCode;
+        legend.appendChild(div);
+    }
+
+    appendToLegend(legend, '<span style="color:blue;"><b>Road</b> (open access)</span>');
+    var solidLineSegment = '<line x1="0" y1="4" x2="25" y2="2" stroke-width="2.5" stroke="' + Colors.MEDIUM_BLUE + '" fill="none" id="svg_1_1"/>';
+    solidLineSegment += '<line x1="25" y1="2" x2="60" y2="3" stroke-width="2.5" stroke="' + Colors.MEDIUM_BLUE + '" fill="none" id="svg_1_2"/>';
+    solidLineSegment += '<line x1="60" y1="3" x2="150" y2="6" stroke-width="2.5" stroke="' + Colors.MEDIUM_BLUE + '" fill="none" id="svg_1_3"/>';
+    appendToLegend(legend, makeSVG(100, 8, solidLineSegment));
+
+    appendToLegend(legend, '<span style="color:blue;"><b>Bridge</b> (no van access)</span>');
+    var dashedLineSegment = '';
+    for (var i=0; i< 8; i++) {
+        dashedLineSegment += '<line x1="' + (i*20) + '" y1="' + (1+i/2) + '" x2="' + (i*20+15) + '" y2="' + (1.5+i/2) + '" stroke-width="3" stroke="' + Colors.MEDIUM_BLUE + '" fill="none" id="svg_2_' + i + '"/>';
+    }
+    appendToLegend(legend, makeSVG(100, 8, dashedLineSegment));
+
+    appendToLegend(legend, '<span style="color:' + Colors.DARK_GREEN + ';"><b>Trail</b> (no van access)</span>');
+    var dottedLineSegment = '<line x1="0" y1="1" x2="150" y2="1" stroke-width="5" stroke="' + Colors.FAINT_GREEN + '" fill="none" id="svg_3_0"/>';
+    for (var i=0; i< 25; i++) {
+        dottedLineSegment += '<line x1="' + (i*6) + '" y1="1" x2="' + (i*6+3) + '" y2="1" stroke-width="3" stroke="' + Colors.DARK_GREEN + '" fill="none" id="svg_3_' + i + '"/>';
+    }
+    appendToLegend(legend, makeSVG(100, 8, dottedLineSegment));
+
+    if (InitialSettings.allowVanRoutes) {
+        appendToLegend(legend, '<span style="color:' + Colors.DARK_GREY + ';"><b>Van Route</b></span>');
+        var hatchedLineSegment = createHatchedGraySVG(30, 1);
+        appendToLegend(legend, makeSVG(100, 8, hatchedLineSegment));
+    }
+
+    appendToLegend(legend, '<span style="color:black;"><b>Access Point</b></span>');
+
+    var twoDiamonds = '<rect height="5" width="5" x="2" y="5" transform="rotate(45 4.5 7.5)" stroke-width="2" stroke="' + Colors.MEDIUM_BLUE + '" fill="#FFFFFF" id="svg_3_1"/>';
+    twoDiamonds += '<text xml:space="preserve" x="10" y="12" text-anchor="left" stroke-width="0" stroke="#000000" fill="' + Colors.MEDIUM_BLUE + '" font-size="12" font-weight="bold" font-family="sans-serif" id="svg_3_2">16.9</text>';
+    twoDiamonds += '<rect height="5" width="5" x="45" y="5" transform="rotate(45 47.5 7.5)" stroke-width="2" stroke="' + Colors.DARK_GREEN + '" fill="#FFFFFF" id="svg_3_3"/>';
+    twoDiamonds += '<text xml:space="preserve" x="53" y="12" text-anchor="left" stroke-width="0" stroke="#000000" fill="' + Colors.DARK_GREEN + '" font-size="12" font-weight="bold" font-family="sans-serif" id="svg_3_2">45.2</text>';
+    appendToLegend(legend, makeSVG(80, 16, twoDiamonds));
+
+    appendToLegend(legend, '<span style="color:black;"><b>Turn Point</b></span>');
+
+    var twoCircles = '<circle r="2" cx="4" cy="5" stroke-width="0" stroke="#000000" fill="' + Colors.MEDIUM_BLUE + '" id="svg_4_1"/>';
+    twoCircles += '<text xml:space="preserve" x="10" y="9" text-anchor="left" stroke-width="0" stroke="#000000" fill="' + Colors.MEDIUM_BLUE + '" font-size="10" font-weight="bold" font-family="sans-serif" id="svg_3_2">47.5</text>';
+    twoCircles += '<circle r="2" cx="47" cy="5" stroke-width="0" stroke="#000000" fill="' + Colors.DARK_GREEN + '" id="svg_4_3"/>';
+    twoCircles += '<text xml:space="preserve" x="53" y="9" text-anchor="left" stroke-width="0" stroke="#000000" fill="' + Colors.DARK_GREEN + '" font-size="10" font-weight="bold" font-family="sans-serif" id="svg_3_4">16.8</text>';
+    appendToLegend(legend, makeSVG(80, 13, twoCircles));
+
+    appendToLegend(legend, '<span style="color:' + Colors.MODERATE_GREY + ';">Details? Click on map</span>');
+
+    map.controls[google.maps.ControlPosition.RIGHT_BOTTOM].push(legend);
+
+
+    var popupLegend = '<div><b>' + InitialSettings.title + '</b></div><br>';
+    popupLegend += '<div><span style="color:blue;"><b>Road</b> (easy access from van)</span></div>';
+    popupLegend += '<div>' + makeSVG(150, 8, solidLineSegment) + '</div>';
+
+    popupLegend += '<div><span style="color:blue;"><b>Bridge</b> (no access from van)</span></div>';
+    popupLegend += '<div>' + makeSVG(150, 8, dashedLineSegment) + '</div>';
+
+    popupLegend += '<div><span style="color:' + Colors.DARK_GREEN + ';"><b>Trail</b> (limited access)</span></div>';
+    popupLegend += '<div>' + makeSVG(150, 8, dottedLineSegment) + '</div>';
+
+    if (InitialSettings.allowVanRoutes) {
+        popupLegend += '<div><span style="color:' + Colors.DARK_GREY + ';"><b>Van Route</b> (between segments)</span></div>';
+        popupLegend += '<div>' + makeSVG(150, 8, hatchedLineSegment) + '</div>';
+    }
+
+    // To save vertical space, put access points next to each other in a table
+
+    popupLegend += '<div><table><tr><td>';
+
+    popupLegend += '<div><span style="color:black;"><b>Access Point</b><br>(possible exchange)</span></div>';
+    popupLegend += '<div>' + makeSVG(100, 16, twoDiamonds) + '</div>';
+
+    popupLegend += '</td><td>&nbsp;</td><td>';
+
+    popupLegend += '<div><span style="color:black;"><span style="color:black;"><b>Turn Point</b><br>(zoom in to view)</span></div>';
+    popupLegend += '<div>' + makeSVG(100, 13, twoCircles) + '</div>';
+
+    popupLegend += '</td></tr></table></div>';
+
+    popupLegend += '<div><span style="color:black;">Click marker on map for more information.</span></div>';
+
+    popupLegend += '<div>';
+    popupLegend += '<span style="color:black;">Mileage markers correspond to official <br>turn-by-turn directions. </span>';
+
+    if (InitialSettings.hasTurnByTurnDirections) {
+        popupLegend += '<a href="' + InitialSettings.turnByTurnDirectionsUrl + '" target="_blank">View Directions</a>';
+    }
+    popupLegend += '</div><br>';
+
+    var iw = new google.maps.InfoWindow({
+        content: popupLegend 
+    });
+
+    activeState.map = map;  // Bad design, must improve this
+    activeState.openIW = iw;  // Bad design, must improve this
+
+    google.maps.event.addListener(map, "click", function (e) { 
+        var currentCenter = map.getCenter();
+        var latLngZoomLiteral = currentCenter.lat().toFixed(4) + ',' + currentCenter.lng().toFixed(4) + ',' + map.getZoom();
+        var currentURL = window.location.href;
+        if (currentURL.indexOf('?') > -1) {
+            currentURL = currentURL.substring(0, currentURL.indexOf('?'));
+        }
+        var linkURL = currentURL + '?' + latLngZoomLiteral;
+        var currentViewHtml = '<br><div>Current view: <a href="' + linkURL + '">' + latLngZoomLiteral + '</a></div>';
+        var buttonTable = createButtonTable();
+        iw.setContent(popupLegend + buttonTable + currentViewHtml);
+        iw.setPosition(e.latLng);
+        iw.open(map, this); 
+      });
+
+}
+
+
+function handleGeolocate(checkbox) {
+    activeState.showGeolocate = checkbox.checked;
+
+/* // The following works OK but is resource-inefficient if someone turns on/off geolocation multiple times
+    if (checkbox.checked) {
+        activeState.geolocationMarker = showCurrentGeoLocation(activeState.map);
+    } else {
+        activeState.geolocationMarker.setMap(null);
+        activeState.geolocationMarker = null;
+    }
+*/
+
+    if (checkbox.checked) {
+        if (activeState.geolocationMarker) {
+            activeState.geolocationMarker.setMarkerOptions({ visible : true });
+            activeState.geolocationMarker.setCircleOptions({ visible : true });
+            activeState.map.setCenter(activeState.geolocationMarker.getPosition());
+        } else {
+            activeState.geolocationMarker = showCurrentGeoLocation(activeState.map);
+        }
+    } else {
+        if (activeState.geolocationMarker) {
+            activeState.geolocationMarker.setMarkerOptions({ visible : false });
+            activeState.geolocationMarker.setCircleOptions({ visible : false });
+        }
+    }
+
+}
+
+
+function handleBathrooms(checkbox) {
+    activeState.showBathrooms = checkbox.checked;
+
+    if (checkbox.checked) {
+        // If zoomed out too far, zoom in some
+        if (activeState.map.getZoom() < Config.ZOOMDISPLAY["SPECIALMARKERS"]-1) {
+            activeState.map.setZoom(Config.ZOOMDISPLAY["SPECIALMARKERS"]-1);
+        }
+    }
+
+    // Just by calling the redraw function, it will either display or hide markers based on activeState.showBathrooms
+    showOrHideElements(activeState.map.getZoom());
+
+}
+
+
+function handleVanRoutes(checkbox) {
+    activeState.showVanRoutes = checkbox.checked;
+
+    if (checkbox.checked) {
+        // If zoomed out too far, zoom in some
+        if (activeState.map.getZoom() < Config.ZOOMDISPLAY["SPECIALMARKERS"]-1) {
+            activeState.map.setZoom(Config.ZOOMDISPLAY["SPECIALMARKERS"]-1);
+        }
+    }
+
+    // Just by calling the redraw function, it will either display or hide van routes based on activeState.showVanRoutes
+    showOrHideElements(activeState.map.getZoom());
+}
+
+
+function showCurrentGeoLocation(map) {
+    var geolocationMarker = null;  // remains null if unable to turn on the marker
+
+    function handleLocationError(browserHasGeolocation, pos) { // Utility
+        var errorWindow = new google.maps.InfoWindow({map: map});
+        errorWindow.setPosition(pos);
+        errorWindow.setContent(browserHasGeolocation ?
+                          'Error: The Geolocation service failed.' :
+                          'Error: Your browser doesn\'t support geolocation.');
+    }
+
+    // Try HTML5 geolocation.
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(function(position) {
+            var pos = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude
+              };
+
+            map.setCenter(pos);
+        }, function() {
+            handleLocationError(true, map.getCenter());
+        });
+
+        geolocationMarker = new GeolocationMarker();
+        geolocationMarker.setCircleOptions({fillColor: Colors.FAINT_GREY });
+
+        google.maps.event.addListener(geolocationMarker, 'geolocation_error', function(e) {
+            alert('There was an error obtaining your position. Message: ' + e.message);
+          });
+
+        geolocationMarker.setMap(map);
+
+    } else {
+        // Browser doesn't support Geolocation
+        handleLocationError(false, map.getCenter());
+    }
+
+    return geolocationMarker;
+}
+
+
+
+function readURLParams(startOptions) {
+
+    function isNumeric(n) {
+      return !isNaN(parseFloat(n)) && isFinite(n);
+    }
+
+    if (location.search.substring(1).length > 0) {
+        var parameters = location.search.substring(1).split("&");
+        if (parameters.length > 0) {
+            var latLngZoomLiteral = parameters[0].split(',');
+            if ((latLngZoomLiteral.length >= 2)
+                    && isNumeric(latLngZoomLiteral[0]) && isNumeric(latLngZoomLiteral[1])) {
+                startOptions.startLatitude =  latLngZoomLiteral[0];
+                startOptions.startLongitude = latLngZoomLiteral[1];
+                if ((latLngZoomLiteral.length >= 3) && isNumeric(latLngZoomLiteral[2])) {
+                    startOptions.zoomLevel = Number(latLngZoomLiteral[2]);
+                }
+            }
+        }
+    }
+}
+
+
+function initialize() {
+    var startOptions = {
+        zoomLevel : 10,
+        startLatitude : InitialSettings.startLatitude,
+        startLongitude : InitialSettings.startLongitude
+      };
+
+    readURLParams(startOptions);
+
+    var map = createMapObject(startOptions);
+
+    createSegmentLayer(map);
+
+    createLabelLayer(map);
+
+    createLegend(map);
+}
+
+
+google.maps.event.addDomListener(window, 'load', initialize);
+
+    </script>
+  </head>
+<body>
+    <div id="map-canvas"></div>
+    <div id="legend"></div>
+  </body>
+</html>
